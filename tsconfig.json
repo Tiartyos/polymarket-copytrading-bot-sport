@@ -21,7 +21,9 @@
     // Other recommended options
     "jsx": "react-jsx",
     "isolatedModules": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true
   },
   "include": ["src"],
   "exclude": ["dist", "node_modules", "test", "ui"]

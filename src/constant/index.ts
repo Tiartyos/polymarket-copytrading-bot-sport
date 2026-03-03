@@ -1,5 +1,3 @@
-import "bign.ts";
-
 export const DEFAULT_HOST = "https://clob.polymarket.com";
 export const DATA_API = "https://data-api.polymarket.com";
 

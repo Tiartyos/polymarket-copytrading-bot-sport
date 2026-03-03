@@ -1,6 +1,6 @@
 import { Wallet } from "ethers";
 import { ClobClient, Chain } from "@polymarket/clob-client";
-import { SignatureType } from "@polymarket/order-utils";
+import { SignatureType } from "@polymarket/clob-client";
 import type { AppConfig } from "../types";
 
 export async function createClient(config: AppConfig): Promise<ClobClient> {

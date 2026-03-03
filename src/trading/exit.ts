@@ -1,6 +1,6 @@
 import type { ClobClient } from "@polymarket/clob-client";
 import { OrderType, Side } from "@polymarket/clob-client";
-import { Big } from "ts-big-number";
+import Big from "big.js";
 import type { AppConfig } from "../types";
 import { DATA_API, EXIT_INTERVAL_MS, POSITIONS_MAX_OFFSET, POSITIONS_PAGE_SIZE } from "../constant";
 
@@ -17,8 +17,8 @@ export function recordEntry(assetId: string, size: number, price: number): void 
   const priceB = new Big(price);
   const cur = entries.get(assetId);
   if (cur) {
-    const newSize = cur.size.add(sizeB);
-    cur.entryPrice = cur.entryPrice.mul(cur.size).add(priceB.mul(sizeB)).div(newSize);
+    const newSize = cur.size.plus(sizeB);
+    cur.entryPrice = cur.entryPrice.times(cur.size).plus(priceB.times(sizeB)).div(newSize);
     cur.size = newSize;
   } else {
     entries.set(assetId, { entryPrice: priceB, size: sizeB, maxPrice: priceB });
@@ -55,12 +55,12 @@ export function runExitLoop(client: ClobClient, config: AppConfig): void {
         const posSizeB = new Big(p.size);
         const sizeB = entry.size.lte(posSizeB) ? entry.size : posSizeB;
         if (sizeB.lte(0)) continue;
-        const pnlPctB = curPriceB.minus(entry.entryPrice).div(entry.entryPrice).mul(100);
+        const pnlPctB = curPriceB.minus(entry.entryPrice).div(entry.entryPrice).times(100);
         const pnlPct = pnlPctB.toNumber();
         const e = entries.get(p.asset)!;
         if (curPriceB.gt(e.maxPrice)) e.maxPrice = curPriceB;
         const trailPctB = e.maxPrice.gt(0)
-          ? e.maxPrice.minus(curPriceB).div(e.maxPrice).mul(100)
+          ? e.maxPrice.minus(curPriceB).div(e.maxPrice).times(100)
           : new Big(0);
         const trailPct = trailPctB.toNumber();
 
@@ -70,7 +70,7 @@ export function runExitLoop(client: ClobClient, config: AppConfig): void {
         if (trailingStop > 0 && trailPct >= trailingStop) shouldSell = true;
         if (!shouldSell) continue;
 
-        const amount = sizeB.mul(curPriceB).toNumber();
+        const amount = sizeB.times(curPriceB).toNumber();
         const tickSize = await client.getTickSize(p.asset);
         const negRisk = await client.getNegRisk(p.asset);
         await client.createAndPostMarketOrder(

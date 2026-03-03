@@ -12,28 +12,30 @@ simulation = false
 [copy]
 # Single address: websocket. Multiple: polling positions API.
 target_address = [
-    # "0x204f72f35326db932158cba6adff0b9a1da95e14",
     "0x1979ae6B7E6534dE9c4539D0c205E582cA637C9D",
-    "0x204f72f35326db932158cba6adff0b9a1da95e14"
+    "0x204f72f35326db932158cba6adff0b9a1da95e14",
+    "0x6bab41a0dc40d6dd4c1a915b8c01969479fd1292"
 ]
 revert_trade = false
 # Multiply copied trade size by this (1.0 = same size)
-size_multiplier = 0.01
+# 0.005 = 0.5% of leader's trade size (conservative for $95 bankroll)
+size_multiplier = 0.005
 
 # Polling interval (sec) when using multiple targets
-poll_interval_sec = 10
+poll_interval_sec = 15
 
 [exit]
 # Take profit at this % gain (0 = disabled)
-take_profit = 0
+take_profit = 50
 # Stop loss at this % loss (0 = disabled)
-stop_loss = 0
+stop_loss = 25
 # Trailing stop at this % (0 = disabled)
 trailing_stop = 0
 
 [filter]
 # Max USD to spend per copied trade (0 = no limit)
-buy_amount_limit_in_usd = 0
+# Cap at $5 per trade to preserve capital
+buy_amount_limit_in_usd = 5
 
 # Only copy trades made within the last N seconds (0 = no filter)
 entry_trade_sec = 0
