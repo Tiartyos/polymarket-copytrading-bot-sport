@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import type { PositionSummary } from "../../types/state";
 import { SellModal } from "../../components/SellModal";
-import { fetchMyPositions, type MyFillRow } from "../../api/client";
+import { fetchMyPositions, sellPosition, type MyFillRow } from "../../api/client";
 
 interface PositionsPanelProps {
   targetAddresses: string[];
@@ -20,9 +20,123 @@ function fmtDuration(iso: string): string {
 
 // ── My Bot Positions ──────────────────────────────────────────────────────────
 
+interface BotSellModalProps {
+  row: MyFillRow;
+  onClose: () => void;
+  onSold: (assetId: string) => void;
+}
+
+function BotSellModal({ row, onClose, onSold }: BotSellModalProps) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const isDone = txHash !== null;
+
+  async function handleConfirm() {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await sellPosition(row.asset_id, row.totalSize, row.avgPrice);
+      if (result.success) {
+        setTxHash(result.transaction_hash ?? "");
+        onSold(row.asset_id);
+      } else {
+        setError(result.error ?? "Sell failed");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Network error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const label = row.market_id.length > 32 ? row.market_id.slice(0, 30) + "…" : row.market_id;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+      onClick={(e) => { if (e.target === e.currentTarget && !loading) onClose(); }}
+    >
+      <div className="bg-[#1a1a1a] border border-[#444] rounded-lg p-5 w-[340px] shadow-2xl text-sm">
+        <h2 className="text-white font-semibold text-base mb-4">
+          {isDone ? "✅ Sell Submitted" : "Sell Position"}
+        </h2>
+
+        <div className="bg-[#252525] rounded p-3 mb-4 space-y-1 text-[12px]">
+          <div className="flex justify-between gap-2">
+            <span className="text-[#888] shrink-0">Market</span>
+            <span className="text-[#ccc] break-all text-right">{label}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-[#888]">Size</span>
+            <span className="text-[#6f6] tabular-nums font-semibold">{row.totalSize.toFixed(4)}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-[#888]">Avg buy price</span>
+            <span className="text-[#ccc] tabular-nums">{row.avgPrice.toFixed(4)}</span>
+          </div>
+          <div className="flex justify-between border-t border-[#333] pt-1 mt-1">
+            <span className="text-[#888]">Cost basis</span>
+            <span className="text-[#7af] font-semibold tabular-nums">${row.totalUsd.toFixed(2)}</span>
+          </div>
+        </div>
+
+        {isDone && txHash && (
+          <div className="mb-4 bg-[#1a2b1a] border border-[#2d4d2d] rounded p-2 text-[11px] break-all text-[#6f6]">
+            Tx: {txHash}
+          </div>
+        )}
+        {isDone && !txHash && (
+          <div className="mb-4 text-[11px] text-[#888]">Order submitted (no tx hash returned).</div>
+        )}
+        {error && (
+          <div className="mb-4 bg-[#2b1a1a] border border-[#4d2d2d] rounded p-2 text-[11px] text-[#f88]">
+            {error}
+          </div>
+        )}
+
+        <div className="flex gap-2 justify-end">
+          {!isDone ? (
+            <>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={loading}
+                className="px-3 py-1.5 rounded text-[12px] bg-[#2a2a2a] hover:bg-[#333] text-[#aaa] disabled:opacity-40 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={loading}
+                className="px-4 py-1.5 rounded text-[12px] bg-[#b03030] hover:bg-[#cc3333] text-white font-semibold disabled:opacity-40 cursor-pointer flex items-center gap-1.5"
+              >
+                {loading && (
+                  <span className="inline-block w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                )}
+                {loading ? "Selling…" : "Confirm Sell"}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-1.5 rounded text-[12px] bg-[#2a2a2a] hover:bg-[#333] text-white cursor-pointer"
+            >
+              Close
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MyPositionsSection() {
   const [fills, setFills] = useState<MyFillRow[]>([]);
   const [open, setOpen] = useState(true);
+  const [sellTarget, setSellTarget] = useState<MyFillRow | null>(null);
 
   useEffect(() => {
     fetchMyPositions().then(setFills).catch(() => {});
@@ -30,10 +144,23 @@ function MyPositionsSection() {
     return () => clearInterval(t);
   }, []);
 
+  function handleSold(assetId: string) {
+    setFills((prev) => prev.filter((f) => f.asset_id !== assetId));
+    setSellTarget(null);
+  }
+
   const totalUsd = fills.reduce((s, r) => s + r.totalUsd, 0);
 
   return (
     <div className="mb-4">
+      {sellTarget && (
+        <BotSellModal
+          row={sellTarget}
+          onClose={() => setSellTarget(null)}
+          onSold={handleSold}
+        />
+      )}
+
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -56,7 +183,8 @@ function MyPositionsSection() {
                 <th className="text-[#555] font-medium text-left py-0.5 pr-2 border-b border-[#222]">Market</th>
                 <th className="text-[#555] font-medium text-right py-0.5 pr-2 border-b border-[#222] tabular-nums">Size</th>
                 <th className="text-[#555] font-medium text-right py-0.5 pr-2 border-b border-[#222] tabular-nums">Avg</th>
-                <th className="text-[#555] font-medium text-right py-0.5 border-b border-[#222] tabular-nums">Cost</th>
+                <th className="text-[#555] font-medium text-right py-0.5 pr-2 border-b border-[#222] tabular-nums">Cost</th>
+                <th className="border-b border-[#222]" />
               </tr>
             </thead>
             <tbody>
@@ -70,7 +198,16 @@ function MyPositionsSection() {
                     </td>
                     <td className="py-1 pr-2 text-right tabular-nums text-[#6f6]">{r.totalSize.toFixed(2)}</td>
                     <td className="py-1 pr-2 text-right tabular-nums text-[#888]">{r.avgPrice.toFixed(3)}</td>
-                    <td className="py-1 text-right tabular-nums text-[#7af] whitespace-nowrap">${r.totalUsd.toFixed(2)}</td>
+                    <td className="py-1 pr-2 text-right tabular-nums text-[#7af] whitespace-nowrap">${r.totalUsd.toFixed(2)}</td>
+                    <td className="py-1 text-right whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => setSellTarget(r)}
+                        className="px-1.5 py-0.5 rounded text-[10px] bg-[#3d1a1a] hover:bg-[#5a2020] text-[#f88] border border-[#5a2020] hover:border-[#cc3333] cursor-pointer transition-colors"
+                      >
+                        Sell
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
@@ -80,6 +217,7 @@ function MyPositionsSection() {
                 <tr>
                   <td colSpan={3} className="pt-1 text-right text-[#555] text-[10px]">Total</td>
                   <td className="pt-1 text-right tabular-nums text-[#7af] font-semibold">${totalUsd.toFixed(2)}</td>
+                  <td />
                 </tr>
               </tfoot>
             )}

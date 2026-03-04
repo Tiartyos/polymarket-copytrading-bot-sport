@@ -128,7 +128,7 @@ export function startWebServer(port: number): void {
             { tickSize, negRisk },
             OrderType.FOK
           );
-          const txHash = resp?.transactionHash ?? resp?.transaction_hash ?? resp?.orderID ?? null;
+          const txHash = resp?.transactionsHashes?.[0] ?? resp?.transactionHash ?? resp?.transaction_hash ?? null;
           res.end(JSON.stringify({ success: true, transaction_hash: txHash }));
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
