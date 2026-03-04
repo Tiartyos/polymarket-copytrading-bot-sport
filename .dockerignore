@@ -1,0 +1,11 @@
+node_modules
+frontend/node_modules
+dist
+frontend/dist
+.env
+data/*.db
+data/*.db-wal
+data/*.db-shm
+.git
+*.log
+log.txt

@@ -41,6 +41,48 @@ cd ..
 npm run dev
 ```
 
+## Docker
+
+### Quick start
+
+```bash
+# 1. Copy and fill in your secrets
+cp .env.example .env
+# edit .env — set WALLET_PRIVATE_KEY, PROXY_WALLET_ADDRESS, SIGNATURE_TYPE
+
+# 2. (Optional) edit trade.toml for targets / filters
+
+# 3. Build and run
+docker compose up --build
+```
+
+The UI will be available at <http://localhost:8000>.
+
+The `data/` folder is bind-mounted so the SQLite database survives container restarts.
+
+To run in the background:
+
+```bash
+docker compose up --build -d
+docker compose logs -f   # tail logs
+```
+
+To stop:
+
+```bash
+docker compose down
+```
+
+### Custom port
+
+Set `PORT` in your environment or `.env` before bringing the stack up:
+
+```bash
+PORT=9000 docker compose up --build -d
+```
+
+---
+
 # Advanced Polymarket Trading Bot.
 
 I have developed an advanced Polymarket trading bot, including a high-performance Rust-based copy trading system optimized for low-latency execution, as well as an AI agent trading bot built in TypeScript with automated strategy logic. 
@@ -54,7 +96,10 @@ TG: [xstacks](https://t.me/x_stacks)
 ## Run
 
 ```bash
-npm run dev    # tsx src/index.ts
+npm run dev          # bot + UI in watch mode (tsx)
+npm run monitor      # monitor-only mode (no order placement)
+npm run sell-all     # sell all open positions
+npm run reset-db     # wipe the local SQLite database (re-created on next start)
 ```
 
 ## Env

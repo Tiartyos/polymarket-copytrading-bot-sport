@@ -1,0 +1,13 @@
+services:
+  bot:
+    build: .
+    ports:
+      - "${PORT:-8000}:8000"
+    volumes:
+      # Persist SQLite database across restarts
+      - ./data:/app/data
+      # Mount your own config (read-only)
+      - ./trade.toml:/app/trade.toml:ro
+    env_file:
+      - .env
+    restart: unless-stopped
