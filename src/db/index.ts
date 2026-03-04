@@ -13,7 +13,8 @@ export function initDb(dataDir = "data"): void {
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
   const dbPath = path.join(dataDir, "polymarket-bot.db");
   db = new Database(dbPath);
-  // WAL mode = much faster writes, safe concurrent reads
+  // WAL mode: faster writes, allows concurrent reads from DBgate sidecar.
+  // Requires named Docker volume (not Windows bind mount) — see docker-compose.yml.
   db.pragma("journal_mode = WAL");
   db.pragma("synchronous = NORMAL");
   runMigrations(db);

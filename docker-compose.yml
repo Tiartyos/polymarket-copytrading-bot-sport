@@ -4,8 +4,7 @@ services:
     ports:
       - "${PORT:-8000}:8000"
     volumes:
-      # Named volume keeps SQLite's WAL mode working on Windows hosts
-      # (bind mounts on Windows don't support the shm files WAL requires)
+      # Named volume keeps SQLite locking clean inside WSL2 (no Windows NTFS locking issues)
       - bot-data:/app/data
       # Mount your own config (read-only)
       - ./trade.toml:/app/trade.toml:ro
@@ -13,5 +12,20 @@ services:
       - .env
     restart: unless-stopped
 
+  dbgate:
+    image: dbgate/dbgate
+    restart: unless-stopped
+    ports:
+      - "${DBGATE_PORT:-8002}:3000"
+    volumes:
+      - bot-data:/db-data
+      - dbgate-config:/root/.dbgate
+    environment:
+      CONNECTIONS: bot_db
+      LABEL_bot_db: Polymarket Bot DB
+      FILE_bot_db: /db-data/polymarket-bot.db
+      ENGINE_bot_db: sqlite@dbgate-plugin-sqlite
+
 volumes:
   bot-data:
+  dbgate-config:

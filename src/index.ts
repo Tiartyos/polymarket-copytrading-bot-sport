@@ -72,33 +72,11 @@ async function run() {
   //   (bypass revert_trade — that flag only prevents copying arbitrary sells
   //   of things we don't hold). Use the bot's actual held size so we sell
   //   exactly what we own, not a scaled fraction of the leader's delta.
-  function handlePolledTrade(trade: LeaderTrade, fromUser: string): void {
-    if (monitorOnly) return;
-
-    if (trade.side === "SELL") {
-      const botSize = getBotPositionSizes().get(trade.asset_id) ?? 0;
-      const weHold = botSize > 0 && hasFilledBuyForAsset(fromUser, trade.asset_id);
-      if (!weHold) {
-        // We don't hold this asset — respect the revert_trade filter
-        if (!config.copy.revertTrade) {
-          logTrade("SKIP", trade, { targetAddress: fromUser, copyStatus: "revert_trade=false" });
-          return;
-        }
-      } else {
-        // Override: sell exactly what we hold at current price
-        trade = { ...trade, size: String(botSize) };
-        logTrade("EXIT", trade, { targetAddress: fromUser, copyStatus: "leader exited" });
-      }
-    }
-
-    if (!shouldCopyTrade(config, trade)) return;
-
+  function executeTrade(trade: LeaderTrade, fromUser: string, multiplier: number): void {
     if (config.simulationMode) {
       logTrade("SIM", trade, { targetAddress: fromUser, copyStatus: "skipped" });
     } else if (client) {
-      // For exit SELLs use multiplier=1 (we already sized to our exact holding)
-      const mult = trade.side === "SELL" ? 1.0 : config.copy.sizeMultiplier;
-      copyTrade(client, trade, mult, config.chainId, config.filter.buyAmountLimitInUsd, fromUser)
+      copyTrade(client, trade, multiplier, config.chainId, config.filter.buyAmountLimitInUsd, fromUser)
         .then((filled) => {
           if (filled == null) { logTrade("LIVE", trade, { targetAddress: fromUser, copyStatus: "skip" }); return; }
           if (trade.side === "BUY") recordEntry(trade.asset_id, filled.size, filled.price);
@@ -109,6 +87,33 @@ async function run() {
           console.error("  ", e?.message ?? e);
         });
     }
+  }
+
+  function handlePolledTrade(trade: LeaderTrade, fromUser: string): void {
+    if (monitorOnly) return;
+
+    if (trade.side === "SELL") {
+      const botSize = getBotPositionSizes().get(trade.asset_id) ?? 0;
+      const weHold = botSize > 0 && hasFilledBuyForAsset(fromUser, trade.asset_id);
+      if (weHold) {
+        // Leader closed a position we copied → always mirror the exit.
+        // Bypass shouldCopyTrade (revert_trade only blocks arbitrary short-sells,
+        // not closing positions we already entered).
+        // Sell the bot's exact on-chain size at multiplier 1 (no scaling).
+        const exitTrade = { ...trade, size: String(botSize) };
+        logTrade("EXIT", exitTrade, { targetAddress: fromUser, copyStatus: "leader exited" });
+        executeTrade(exitTrade, fromUser, 1.0);
+        return;
+      }
+      // We don't hold it — respect the revert_trade filter
+      if (!config.copy.revertTrade) {
+        logTrade("SKIP", trade, { targetAddress: fromUser, copyStatus: "revert_trade=false" });
+        return;
+      }
+    }
+
+    if (!shouldCopyTrade(config, trade)) return;
+    executeTrade(trade, fromUser, config.copy.sizeMultiplier);
   }
 
   if (targets.length === 1) {
