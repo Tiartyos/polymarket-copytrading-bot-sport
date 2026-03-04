@@ -3,9 +3,14 @@ import { createClient } from "./config/client";
 import { runActivityStream, logTrade, runPositionPolling, runPositionsUiPoll } from "./realtime";
 import { copyTrade, shouldCopyTrade, recordEntry, runExitLoop } from "./trading";
 import { startWebServer, setStatus, setUiConfig } from "./web";
+import { initDb } from "./db";
 
 async function run() {
   const config = loadConfig();
+
+  // Initialize persistence layer — must happen before any trade logic
+  initDb("data");
+
   const targets = config.copy.targetAddresses;
   if (!targets.length) {
     console.error("No targets. Set copy.target_address in trade.toml");
@@ -47,7 +52,8 @@ async function run() {
           trade,
           config.copy.sizeMultiplier,
           config.chainId,
-          config.filter.buyAmountLimitInUsd
+          config.filter.buyAmountLimitInUsd,
+          fromUser
         )
           .then((filled) => {
             if (filled && trade.side === "BUY") recordEntry(trade.asset_id, filled.size, filled.price);

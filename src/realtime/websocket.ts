@@ -68,7 +68,8 @@ export function runActivityStream(client: ClobClient | null, config: AppConfig):
           trade,
           config.copy.sizeMultiplier,
           config.chainId,
-          config.filter.buyAmountLimitInUsd
+          config.filter.buyAmountLimitInUsd,
+          config.copy.targetAddress
         )
           .then((filled) => {
             if (filled && trade.side === "BUY") recordEntry(trade.asset_id, filled.size, filled.price);
