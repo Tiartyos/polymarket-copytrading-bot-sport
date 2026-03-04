@@ -18,7 +18,7 @@ async function run() {
     console.error("No targets. Set copy.target_address in trade.toml");
     process.exit(1);
   }
-  if (!config.simulationMode && !monitorOnly) {
+  if (!config.simulationMode) {
     if (!config.walletPrivateKey) {
       console.error("No wallet. Set WALLET_PRIVATE_KEY in .env");
       process.exit(1);
@@ -29,11 +29,11 @@ async function run() {
     }
   }
 
-  const client = (config.simulationMode || monitorOnly) ? null : await createClient(config);
+  const client = config.simulationMode ? null : await createClient(config);
   if (client) setClient(client);
 
   // ── Verify USDC balance and exchange allowance, approve if needed ──────────
-  if (!config.simulationMode && !monitorOnly && config.walletPrivateKey) {
+  if (!config.simulationMode && config.walletPrivateKey) {
     await ensureUsdcApproval(config.walletPrivateKey, config.chainId).catch((e) =>
       console.error("[USDC] Allowance check failed:", e?.message ?? e)
     );
@@ -46,7 +46,7 @@ async function run() {
   setStatus(monitorOnly ? "Monitor" : config.simulationMode ? "Sim" : "Live", targets.length, config.walletAddress, targets);
   if (config.ui) setUiConfig(config.ui);
   startWebServer(config.port);
-  if (monitorOnly) console.log("[MONITOR] Read-only mode — no orders will be placed");
+  if (monitorOnly) console.log("[MONITOR] Monitor mode — no new copy-trade orders will be placed (manual sells still work)");
 
   // ── Poll bot wallet's live positions so UI knows which fills are still open ──
   if (!config.simulationMode && config.walletAddress) {
