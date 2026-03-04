@@ -12,6 +12,7 @@ export interface TradeLog {
 }
 
 export interface PositionSummary {
+  asset_id: string;
   slug: string;
   outcome: string;
   size: number;

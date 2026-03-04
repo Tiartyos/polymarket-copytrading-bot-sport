@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import type { PositionSummary } from "../../types/state";
+import { SellModal } from "../../components/SellModal";
 
 interface PositionsPanelProps {
   targetAddresses: string[];
@@ -28,6 +29,7 @@ function UserBlock({
   deltaAnimationSec: number;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [sellingPosition, setSellingPosition] = useState<PositionSummary | null>(null);
   const recentByKey = useMemo(() => ({ current: {} as Record<string, number> }), []);
   const key = addr + "|";
   rawPos.forEach((p) => {
@@ -58,6 +60,13 @@ function UserBlock({
 
   return (
     <div className="mb-4 last:mb-0">
+      {sellingPosition && (
+        <SellModal
+          position={sellingPosition}
+          onClose={() => setSellingPosition(null)}
+          onSold={() => setSellingPosition(null)}
+        />
+      )}
       <button
         type="button"
         onClick={() => setExpanded((e) => !e)}
@@ -94,9 +103,10 @@ function UserBlock({
                 <th className="text-[#888] font-medium text-left py-1 pr-2 border-b border-[#333]">
                   Price
                 </th>
-                <th className="text-[#888] font-medium text-right py-1 pr-0 border-b border-[#333]">
+                <th className="text-[#888] font-medium text-right py-1 pr-2 border-b border-[#333]">
                   Δ
                 </th>
+                <th className="text-[#888] font-medium text-right py-1 border-b border-[#333]" />
               </tr>
             </thead>
             <tbody>
@@ -125,8 +135,19 @@ function UserBlock({
                     <td className="py-1 pr-2 text-[#888] tabular-nums whitespace-nowrap">
                       {p.curPrice}
                     </td>
-                    <td className={`py-1 text-right tabular-nums min-w-[3.5em] ${deltaCls}`} style={deltaStyle}>
+                    <td className={`py-1 pr-2 text-right tabular-nums min-w-[3.5em] ${deltaCls}`} style={deltaStyle}>
                       {deltaStr}
+                    </td>
+                    <td className="py-1 text-right whitespace-nowrap">
+                      {p.size > 0 && p.asset_id && (
+                        <button
+                          type="button"
+                          onClick={() => setSellingPosition(p)}
+                          className="px-1.5 py-0.5 rounded text-[10px] bg-[#3d1a1a] hover:bg-[#5a2020] text-[#f88] border border-[#5a2020] hover:border-[#cc3333] cursor-pointer transition-colors"
+                        >
+                          Sell
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );

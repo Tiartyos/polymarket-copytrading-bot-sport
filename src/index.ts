@@ -2,7 +2,7 @@ import { loadConfig } from "./config";
 import { createClient } from "./config/client";
 import { runActivityStream, logTrade, runPositionPolling, runPositionsUiPoll } from "./realtime";
 import { copyTrade, shouldCopyTrade, recordEntry, runExitLoop } from "./trading";
-import { startWebServer, setStatus, setUiConfig } from "./web";
+import { startWebServer, setStatus, setUiConfig, setClient } from "./web";
 import { initDb } from "./db";
 
 async function run() {
@@ -28,6 +28,7 @@ async function run() {
   }
 
   const client = config.simulationMode ? null : await createClient(config);
+  if (client) setClient(client);
   if (client && (config.exit.takeProfit > 0 || config.exit.stopLoss > 0 || config.exit.trailingStop > 0)) {
     runExitLoop(client, config);
   }

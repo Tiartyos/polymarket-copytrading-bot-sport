@@ -1,2 +1,2 @@
 export { startWebServer } from "./server";
-export { setStatus, setUiConfig } from "./state";
+export { setStatus, setUiConfig, setClient } from "./state";

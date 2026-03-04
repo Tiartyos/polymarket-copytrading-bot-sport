@@ -12,6 +12,7 @@ export interface TradeLog {
 }
 
 export interface PositionSummary {
+  asset_id: string;
   slug: string;
   outcome: string;
   size: number;
@@ -21,6 +22,14 @@ export interface PositionSummary {
   /** ISO timestamp when delta was first observed (for sort-to-top duration) */
   deltaAt?: string;
 }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _client: any = null;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function setClient(c: any): void { _client = c; }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getClient(): any { return _client; }
 
 const MAX_LOGS = 100;
 const logs: TradeLog[] = [];
@@ -77,7 +86,7 @@ export function setUiConfig(config: { deltaHighlightSec: number; deltaAnimationS
   uiConfig = config;
 }
 
-export function setPositions(user: string, positions: { slug?: string; outcome?: string; size: number; curPrice: number }[]): void {
+export function setPositions(user: string, positions: { asset_id?: string; slug?: string; outcome?: string; size: number; curPrice: number }[]): void {
   const prev = prevSizes[user] ?? {};
   const now = new Date().toISOString();
   positionsByUser[user] = positions.map((p) => {
@@ -89,6 +98,7 @@ export function setPositions(user: string, positions: { slug?: string; outcome?:
     prev[key] = p.size;
     const hasDelta = delta !== 0 && delta !== undefined;
     return {
+      asset_id: p.asset_id ?? "",
       slug,
       outcome,
       size: p.size,

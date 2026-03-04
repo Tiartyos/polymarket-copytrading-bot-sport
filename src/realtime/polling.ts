@@ -118,7 +118,7 @@ export function runPositionPolling(
         }
 
         const pprev = prev[user];
-        const posList = Object.values(curr).map((c) => ({ ...c }));
+        const posList = Object.entries(curr).map(([asset, c]) => ({ asset_id: asset, ...c }));
         setPositions(user, posList);
         if (!pprev) {
           prev[user] = curr;
@@ -198,6 +198,7 @@ export function runPositionsUiPoll(config: AppConfig): void {
       try {
         const positions = await fetchPositions(user);
         const curr = positions.map((p) => ({
+          asset_id: p.asset,
           slug: p.slug,
           outcome: p.outcome,
           size: p.size,

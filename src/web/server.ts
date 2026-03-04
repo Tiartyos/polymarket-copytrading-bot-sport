@@ -1,7 +1,7 @@
 import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
-import { getState } from "./state";
+import { getState, getClient } from "./state";
 import { getRecentTrades, getTradeById } from "../db/queries";
 
 const FALLBACK_PUBLIC = path.join(__dirname, "public");
@@ -76,6 +76,46 @@ export function startWebServer(port: number): void {
         res.statusCode = 500;
         res.end(JSON.stringify({ error: "db unavailable" }));
       }
+      return;
+    }
+
+    // ── Manual sell position ─────────────────────────────────────────────────
+    if (urlPath === "/api/positions/sell" && req.method === "POST") {
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      let body = "";
+      req.on("data", (chunk) => { body += chunk; });
+      req.on("end", async () => {
+        try {
+          const { asset_id, size, price } = JSON.parse(body) as { asset_id: string; size: number; price: number };
+          if (!asset_id || !size || !price) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ success: false, error: "asset_id, size and price are required" }));
+            return;
+          }
+          const client = getClient();
+          if (!client) {
+            res.statusCode = 503;
+            res.end(JSON.stringify({ success: false, error: "Bot is in simulation mode — no client available" }));
+            return;
+          }
+          const { OrderType, Side } = await import("@polymarket/clob-client");
+          const tickSize = await client.getTickSize(asset_id);
+          const negRisk = await client.getNegRisk(asset_id);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const resp: any = await client.createAndPostMarketOrder(
+            { tokenID: asset_id, amount: size, side: Side.SELL, orderType: OrderType.FOK },
+            { tickSize, negRisk },
+            OrderType.FOK
+          );
+          const txHash = resp?.transactionHash ?? resp?.transaction_hash ?? resp?.orderID ?? null;
+          res.end(JSON.stringify({ success: true, transaction_hash: txHash }));
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          res.statusCode = 500;
+          res.end(JSON.stringify({ success: false, error: msg }));
+        }
+      });
       return;
     }
 
