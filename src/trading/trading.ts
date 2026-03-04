@@ -3,6 +3,11 @@ import Big from "big.js";
 import type { LeaderTrade, ActivityTradePayload } from "../types";
 import { isAlreadyCopied, insertCopiedTrade, updateTradeStatus } from "../db/queries";
 
+// ── Sequential order queue ───────────────────────────────────────────────────
+// All trade executions are serialized through this chain so concurrent poll
+// events cannot simultaneously drain the wallet balance (race condition fix).
+let _orderQueue: Promise<void> = Promise.resolve();
+
 export async function copyTrade(
   client: ClobClient,
   trade: LeaderTrade,
@@ -10,8 +15,24 @@ export async function copyTrade(
   chainId: number,
   buyAmountLimitInUsd: number = 0,
   leaderAddress: string = "unknown"
-): Promise<{ size: number; price: number } | void> {
-  // ── Duplicate prevention ────────────────────────────────────────────────────
+): Promise<{ size: number; price: number; amountUsd: number } | undefined> {
+  return new Promise((resolve, reject) => {
+    _orderQueue = _orderQueue.then(() =>
+      _executeCopyTrade(client, trade, multiplier, chainId, buyAmountLimitInUsd, leaderAddress)
+        .then(resolve, reject)
+    );
+  });
+}
+
+async function _executeCopyTrade(
+  client: ClobClient,
+  trade: LeaderTrade,
+  multiplier: number,
+  chainId: number,
+  buyAmountLimitInUsd: number,
+  leaderAddress: string
+): Promise<{ size: number; price: number; amountUsd: number } | undefined> {
+  // ── Duplicate prevention ──────────────────────────────────────────────────
   if (isAlreadyCopied(trade.id)) {
     console.log(`[DB] Skipping duplicate trade ${trade.id}`);
     return;
@@ -35,12 +56,18 @@ export async function copyTrade(
 
   if (amountB.lte(0)) return;
 
-  const amountUsd = trade.side === Side.BUY
-    ? sizeOutB.times(priceB).toFixed(4)
-    : amountB.toFixed(4);
+  // ── Minimum order guard ($1.00 Polymarket floor) ──────────────────────────
+  const MIN_ORDER_USD = new Big("1.0");
+  if (amountB.lt(MIN_ORDER_USD)) {
+    console.log(`[SKIP] Scaled order $${amountB.toFixed(4)} < $1.00 min — skipping trade ${trade.id}`);
+    return;
+  }
 
-  // ── Persist as PENDING before hitting the network ──────────────────────────
-  insertCopiedTrade(trade.id, leaderAddress, trade, amountUsd);
+  const amountUsd = amountB.toNumber();
+  const amountUsdStr = amountB.toFixed(4);
+
+  // ── Persist as PENDING before hitting the network ────────────────────────
+  insertCopiedTrade(trade.id, leaderAddress, trade, amountUsdStr);
 
   const amount = amountB.toNumber();
   const order = {
@@ -57,6 +84,12 @@ export async function copyTrade(
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const resp: any = await client.createAndPostMarketOrder(order, { tickSize, negRisk }, OrderType.FOK);
+    // The CLOB client catches HTTP errors internally and may return null or an
+    // error-carrying object instead of throwing. Treat both as failures.
+    if (!resp || resp.error || resp.errorCode) {
+      const msg = resp?.error ?? resp?.errorCode ?? "null response from CLOB client";
+      throw new Error(`Order rejected: ${msg}`);
+    }
     txHash = resp?.transactionHash ?? resp?.transaction_hash ?? resp?.orderID ?? undefined;
     updateTradeStatus(trade.id, "FILLED", txHash);
   } catch (err) {
@@ -65,7 +98,7 @@ export async function copyTrade(
   }
 
   if (trade.side === Side.BUY) {
-    return { size: sizeOutB.toNumber(), price: priceB.toNumber() };
+    return { size: sizeOutB.toNumber(), price: priceB.toNumber(), amountUsd };
   }
 }
 

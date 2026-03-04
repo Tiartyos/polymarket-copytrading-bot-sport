@@ -2,7 +2,7 @@ import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
 import { getState, getClient } from "./state";
-import { getRecentTrades, getTradeById } from "../db/queries";
+import { getRecentTrades, getTradeById, getMyOpenFills } from "../db/queries";
 
 const FALLBACK_PUBLIC = path.join(__dirname, "public");
 const UI_DIST = path.join(process.cwd(), "frontend", "dist");
@@ -41,6 +41,19 @@ export function startWebServer(port: number): void {
       res.setHeader("Content-Type", "application/json");
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.end(JSON.stringify(getState()));
+      return;
+    }
+
+    // ── My open positions (filled buys from DB) ───────────────────────────────
+    if (urlPath === "/api/my-positions") {
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      try {
+        res.end(JSON.stringify(getMyOpenFills()));
+      } catch {
+        res.statusCode = 500;
+        res.end(JSON.stringify({ error: "db unavailable" }));
+      }
       return;
     }
 

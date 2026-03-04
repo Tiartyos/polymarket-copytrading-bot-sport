@@ -1,6 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type { PositionSummary } from "../../types/state";
 import { SellModal } from "../../components/SellModal";
+import { fetchMyPositions, type MyFillRow } from "../../api/client";
 
 interface PositionsPanelProps {
   targetAddresses: string[];
@@ -17,11 +18,87 @@ function fmtDuration(iso: string): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
+// ── My Bot Positions ──────────────────────────────────────────────────────────
+
+function MyPositionsSection() {
+  const [fills, setFills] = useState<MyFillRow[]>([]);
+  const [open, setOpen] = useState(true);
+
+  useEffect(() => {
+    fetchMyPositions().then(setFills).catch(() => {});
+    const t = setInterval(() => fetchMyPositions().then(setFills).catch(() => {}), 8000);
+    return () => clearInterval(t);
+  }, []);
+
+  const totalUsd = fills.reduce((s, r) => s + r.totalUsd, 0);
+
+  return (
+    <div className="mb-4">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 w-full text-left mb-1 cursor-pointer"
+      >
+        <span className={`text-[10px] text-[#6af] transition-transform ${open ? "rotate-90" : ""}`}>▶</span>
+        <span className="text-[11px] font-semibold text-[#6af] uppercase tracking-wide">My Bot Positions</span>
+        <span className="ml-auto text-[10px] text-[#555] tabular-nums">
+          {fills.length > 0 && `${fills.length} market${fills.length !== 1 ? "s" : ""} · $${totalUsd.toFixed(2)} in`}
+        </span>
+      </button>
+
+      {open && (
+        fills.length === 0 ? (
+          <p className="text-[11px] text-[#555] pl-3 py-1">No filled buys in DB yet.</p>
+        ) : (
+          <table className="w-full text-[11px] border-collapse">
+            <thead>
+              <tr>
+                <th className="text-[#555] font-medium text-left py-0.5 pr-2 border-b border-[#222]">Market</th>
+                <th className="text-[#555] font-medium text-right py-0.5 pr-2 border-b border-[#222] tabular-nums">Size</th>
+                <th className="text-[#555] font-medium text-right py-0.5 pr-2 border-b border-[#222] tabular-nums">Avg</th>
+                <th className="text-[#555] font-medium text-right py-0.5 border-b border-[#222] tabular-nums">Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fills.map((r, i) => {
+                const label = r.market_id.length > 26 ? r.market_id.slice(0, 24) + "…" : r.market_id;
+                return (
+                  <tr key={`${r.asset_id}-${i}`} className="border-b border-[#1a1a1a] hover:bg-[#141e14]">
+                    <td className="py-1 pr-2 text-[#adf] break-words cursor-default" title={`${r.market_id}\n${r.asset_id}`}>
+                      {label}
+                      {r.fillCount > 1 && <span className="ml-1 text-[#444] text-[9px]">×{r.fillCount}</span>}
+                    </td>
+                    <td className="py-1 pr-2 text-right tabular-nums text-[#6f6]">{r.totalSize.toFixed(2)}</td>
+                    <td className="py-1 pr-2 text-right tabular-nums text-[#888]">{r.avgPrice.toFixed(3)}</td>
+                    <td className="py-1 text-right tabular-nums text-[#7af] whitespace-nowrap">${r.totalUsd.toFixed(2)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            {fills.length > 1 && (
+              <tfoot>
+                <tr>
+                  <td colSpan={3} className="pt-1 text-right text-[#555] text-[10px]">Total</td>
+                  <td className="pt-1 text-right tabular-nums text-[#7af] font-semibold">${totalUsd.toFixed(2)}</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        )
+      )}
+      <div className="border-b border-[#222] mt-3" />
+    </div>
+  );
+}
+
+// ── Tracked traders ───────────────────────────────────────────────────────────
+
 function UserBlock({
   addr,
   positions: rawPos,
   deltaHighlightSec,
   deltaAnimationSec,
+
 }: {
   addr: string;
   positions: PositionSummary[];
@@ -166,34 +243,42 @@ export function PositionsPanel({
   deltaHighlightSec,
   deltaAnimationSec,
 }: PositionsPanelProps) {
+  const [trackersOpen, setTrackersOpen] = useState(false);
   const users = targetAddresses?.length ? targetAddresses : Object.keys(positions);
-  if (!users.length) {
-    return (
-      <div className="rounded-lg border border-[#333] bg-[#1a1a1a] p-3 flex-1 min-h-0 flex flex-col overflow-hidden">
-        <h3 className="text-[11px] text-[#888] uppercase mb-2">Live positions</h3>
-        <p className="text-[#666] text-xs">No targets</p>
-      </div>
-    );
-  }
+
   return (
-    <div className="rounded-lg border border-[#333] bg-[#1a1a1a] p-3 flex-1 min-h-0 flex flex-col overflow-hidden">
-      <h3 className="text-[11px] text-[#888] uppercase mb-2">Live positions</h3>
+    <div className="rounded-lg border border-[#2a2a2a] bg-[#111] p-3 flex-1 min-h-0 flex flex-col overflow-hidden">
       <div className="overflow-y-auto overflow-x-hidden flex-1 min-h-0">
-        {users.map((addr) => {
-          const posKey = Object.keys(positions).find(
-            (k) => k.toLowerCase() === addr.toLowerCase()
-          );
-          const pos = posKey ? (positions[posKey] ?? []) : [];
-          return (
-            <UserBlock
-              key={addr}
-              addr={addr}
-              positions={pos}
-              deltaHighlightSec={deltaHighlightSec}
-              deltaAnimationSec={deltaAnimationSec}
-            />
-          );
-        })}
+        {/* Bot's own fills from DB */}
+        <MyPositionsSection />
+
+        {/* Tracked traders — collapsed by default */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setTrackersOpen((o) => !o)}
+            className="flex items-center gap-1.5 w-full text-left cursor-pointer mb-1"
+          >
+            <span className={`text-[10px] text-[#555] transition-transform ${trackersOpen ? "rotate-90 text-[#8af]" : ""}`}>▶</span>
+            <span className="text-[11px] font-semibold text-[#555] uppercase tracking-wide">Tracked Traders</span>
+            <span className="ml-auto text-[10px] text-[#444]">{users.length} addr</span>
+          </button>
+          {trackersOpen && users.map((addr) => {
+            const posKey = Object.keys(positions).find(
+              (k) => k.toLowerCase() === addr.toLowerCase()
+            );
+            const pos = posKey ? (positions[posKey] ?? []) : [];
+            return (
+              <UserBlock
+                key={addr}
+                addr={addr}
+                positions={pos}
+                deltaHighlightSec={deltaHighlightSec}
+                deltaAnimationSec={deltaAnimationSec}
+              />
+            );
+          })}
+        </div>
       </div>
     </div>
   );

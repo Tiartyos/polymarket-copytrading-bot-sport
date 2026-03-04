@@ -15,11 +15,14 @@ function fmtTime(): string {
 export function logTrade(
   tag: string,
   trade: { side: string; size: string; price: string; asset_id: string; slug?: string; outcome?: string },
-  opts?: string | { targetAddress?: string; copyStatus?: string }
+  opts?: string | { targetAddress?: string; copyStatus?: string; amountUsd?: number }
 ): void {
-  const slug = trade.slug ?? trade.asset_id.slice(0, 12) + "…";
+  const slug = trade.slug ?? trade.asset_id.slice(0, 12) + "\u2026";
   const outcome = trade.outcome ?? "?";
-  const line = [fmtTime(), tag, trade.side, outcome, `size ${trade.size} @ ${trade.price}`, slug].join(" | ");
+  const amountUsd = typeof opts === "object" && opts?.amountUsd != null
+    ? ` [$${opts.amountUsd.toFixed(2)}]`
+    : "";
+  const line = [fmtTime(), tag, trade.side, outcome, `size ${trade.size} @ ${trade.price}${amountUsd}`, slug].join(" | ");
   const extra =
     typeof opts === "string"
       ? opts
@@ -73,7 +76,7 @@ export function runActivityStream(client: ClobClient | null, config: AppConfig):
         )
           .then((filled) => {
             if (filled && trade.side === "BUY") recordEntry(trade.asset_id, filled.size, filled.price);
-            logTrade("LIVE", trade, { targetAddress: config.copy.targetAddress, copyStatus: "ok" });
+            logTrade("LIVE", trade, { targetAddress: config.copy.targetAddress, copyStatus: "ok", amountUsd: filled != null ? filled.amountUsd : undefined });
           })
           .catch((e) => {
             logTrade("LIVE", trade, { targetAddress: config.copy.targetAddress, copyStatus: "FAILED" });

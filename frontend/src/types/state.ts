@@ -9,6 +9,7 @@ export interface TradeLog {
   extra?: string;
   targetAddress?: string;
   copyStatus?: string;
+  amountUsd?: number;
 }
 
 export interface PositionSummary {

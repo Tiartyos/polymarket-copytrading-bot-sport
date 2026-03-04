@@ -98,6 +98,39 @@ export function updateEntryPrice(leaderTradeId: string, entryPrice: string): voi
   ).run(entryPrice, leaderTradeId);
 }
 
+export interface MyFillRow {
+  asset_id: string;
+  market_id: string;
+  totalSize: number;
+  totalUsd: number;
+  avgPrice: number;
+  latestAt: string;
+  fillCount: number;
+}
+
+/**
+ * Group all FILLED BUY trades by asset — used for the "My Positions" UI panel.
+ */
+export function getMyOpenFills(): MyFillRow[] {
+  const db = getDb();
+  return db
+    .prepare(
+      `SELECT
+         asset_id,
+         market_id,
+         SUM(CAST(size       AS REAL)) AS totalSize,
+         SUM(CAST(amount_usd AS REAL)) AS totalUsd,
+         AVG(CAST(price      AS REAL)) AS avgPrice,
+         MAX(timestamp)                AS latestAt,
+         COUNT(*)                      AS fillCount
+       FROM copied_trades
+       WHERE status = 'FILLED' AND side = 'BUY'
+       GROUP BY asset_id
+       ORDER BY latestAt DESC`
+    )
+    .all() as MyFillRow[];
+}
+
 /**
  * Query helpers for UI / analytics use.
  */

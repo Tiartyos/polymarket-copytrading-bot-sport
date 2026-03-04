@@ -70,7 +70,9 @@ export function runExitLoop(client: ClobClient, config: AppConfig): void {
         if (trailingStop > 0 && trailPct >= trailingStop) shouldSell = true;
         if (!shouldSell) continue;
 
-        const amount = sizeB.times(curPriceB).toNumber();
+        // For SELL market orders the CLOB expects `amount` = number of shares
+        // (NOT USDC value — that would only sell a fraction of the position)
+        const amount = sizeB.toNumber();
         const tickSize = await client.getTickSize(p.asset);
         const negRisk = await client.getNegRisk(p.asset);
         await client.createAndPostMarketOrder(

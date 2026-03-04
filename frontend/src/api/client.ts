@@ -8,6 +8,26 @@ export async function fetchState(): Promise<BotState> {
   return res.json();
 }
 
+export interface MyFillRow {
+  asset_id: string;
+  market_id: string;
+  totalSize: number;
+  totalUsd: number;
+  avgPrice: number;
+  latestAt: string;
+  fillCount: number;
+}
+
+export async function fetchMyPositions(): Promise<MyFillRow[]> {
+  try {
+    const res = await fetch(`${API_BASE}/api/my-positions`);
+    if (!res.ok) return [];
+    return res.json();
+  } catch {
+    return [];
+  }
+}
+
 export interface SellResult {
   success: boolean;
   transaction_hash?: string | null;

@@ -14,12 +14,13 @@ simulation = false
 target_address = [
     "0x1979ae6B7E6534dE9c4539D0c205E582cA637C9D",
     "0x204f72f35326db932158cba6adff0b9a1da95e14",
-    "0x6bab41a0dc40d6dd4c1a915b8c01969479fd1292"
+    "0x6bab41a0dc40d6dd4c1a915b8c01969479fd1292",
+    "0x25e28169faea17421fcd4cc361f6436d1e449a09"
 ]
 revert_trade = false
 # Multiply copied trade size by this (1.0 = same size)
 # 0.005 = 0.5% of leader's trade size (conservative for $95 bankroll)
-size_multiplier = 0.005
+size_multiplier = 0.05
 
 # Polling interval (sec) when using multiple targets
 poll_interval_sec = 15

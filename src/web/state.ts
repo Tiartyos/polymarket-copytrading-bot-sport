@@ -9,6 +9,7 @@ export interface TradeLog {
   extra?: string;
   targetAddress?: string;
   copyStatus?: string;
+  amountUsd?: number;
 }
 
 export interface PositionSummary {
@@ -31,7 +32,7 @@ export function setClient(c: any): void { _client = c; }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getClient(): any { return _client; }
 
-const MAX_LOGS = 100;
+const MAX_LOGS = 500;
 const logs: TradeLog[] = [];
 let status: { mode: string; targets: number; wallet?: string; targetAddresses?: string[] } = {
   mode: "",
@@ -48,10 +49,11 @@ const prevSizes: Record<string, Record<string, number>> = {};
 export function pushTrade(
   tag: string,
   trade: { side: string; size: string; price: string; asset_id: string; slug?: string; outcome?: string },
-  opts?: string | { targetAddress?: string; copyStatus?: string }
+  opts?: string | { targetAddress?: string; copyStatus?: string; amountUsd?: number }
 ): void {
   let targetAddress: string | undefined;
   let copyStatus: string | undefined;
+  let amountUsd: number | undefined;
   if (typeof opts === "string") {
     const m = opts.match(/^from\s+(0x[a-fA-F0-9]+)\s+(.+)$/);
     if (m) {
@@ -63,6 +65,7 @@ export function pushTrade(
   } else if (opts) {
     targetAddress = opts.targetAddress;
     copyStatus = opts.copyStatus;
+    amountUsd = opts.amountUsd;
   }
   logs.push({
     time: new Date().toISOString(),
@@ -74,6 +77,7 @@ export function pushTrade(
     slug: trade.slug ?? trade.asset_id.slice(0, 12) + "…",
     targetAddress,
     copyStatus,
+    amountUsd,
   });
   if (logs.length > MAX_LOGS) logs.shift();
 }

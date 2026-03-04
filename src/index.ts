@@ -1,5 +1,5 @@
 import { loadConfig } from "./config";
-import { createClient } from "./config/client";
+import { createClient, ensureUsdcApproval } from "./config/client";
 import { runActivityStream, logTrade, runPositionPolling, runPositionsUiPoll } from "./realtime";
 import { copyTrade, shouldCopyTrade, recordEntry, runExitLoop } from "./trading";
 import { startWebServer, setStatus, setUiConfig, setClient } from "./web";
@@ -29,6 +29,14 @@ async function run() {
 
   const client = config.simulationMode ? null : await createClient(config);
   if (client) setClient(client);
+
+  // ── Verify USDC balance and exchange allowance, approve if needed ──────────
+  if (!config.simulationMode && config.walletPrivateKey) {
+    await ensureUsdcApproval(config.walletPrivateKey, config.chainId).catch((e) =>
+      console.error("[USDC] Allowance check failed:", e?.message ?? e)
+    );
+  }
+
   if (client && (config.exit.takeProfit > 0 || config.exit.stopLoss > 0 || config.exit.trailingStop > 0)) {
     runExitLoop(client, config);
   }
@@ -58,7 +66,7 @@ async function run() {
         )
           .then((filled) => {
             if (filled && trade.side === "BUY") recordEntry(trade.asset_id, filled.size, filled.price);
-            logTrade("LIVE", trade, { targetAddress: fromUser, copyStatus: "ok" });
+            logTrade("LIVE", trade, { targetAddress: fromUser, copyStatus: "ok", amountUsd: filled != null ? filled.amountUsd : undefined });
           })
           .catch((e) => {
             logTrade("LIVE", trade, { targetAddress: fromUser, copyStatus: "FAILED" });
