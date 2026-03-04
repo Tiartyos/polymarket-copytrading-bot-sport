@@ -4,10 +4,14 @@ services:
     ports:
       - "${PORT:-8000}:8000"
     volumes:
-      # Persist SQLite database across restarts
-      - ./data:/app/data
+      # Named volume keeps SQLite's WAL mode working on Windows hosts
+      # (bind mounts on Windows don't support the shm files WAL requires)
+      - bot-data:/app/data
       # Mount your own config (read-only)
       - ./trade.toml:/app/trade.toml:ro
     env_file:
       - .env
     restart: unless-stopped
+
+volumes:
+  bot-data:

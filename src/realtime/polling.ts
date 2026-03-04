@@ -1,6 +1,7 @@
 import { DATA_API } from "../constant";
 import { AppConfig, LeaderTrade } from "../types";
 import { setPositions } from "../web/state";
+import { hasFilledBuyForAsset } from "../db/queries";
 
 interface Position {
   asset: string;
@@ -130,6 +131,14 @@ export function runPositionPolling(
           const s = pprev[asset]?.size ?? 0;
           const delta = c.size - s;
           if (delta > 0) {
+            // Skip if we already hold a filled buy for this asset AND revert_trade
+            // is false (meaning we never mirrored the leader's sell that dropped
+            // the position, so we still hold our copy). This prevents re-buying
+            // after a leader sell+rebuy cycle when we haven't sold our position.
+            if (!config.copy.revertTrade && hasFilledBuyForAsset(user, asset)) {
+              console.log(`${fmtTime()} | SKIP | ${user} | ${c.slug ?? asset.slice(0, 12)} already held, revert_trade=false`);
+              continue;
+            }
             const trade: LeaderTrade = {
               id: `${user}-${asset}-${Date.now()}`,
               asset_id: asset,

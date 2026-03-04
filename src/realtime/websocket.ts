@@ -49,8 +49,26 @@ export function runActivityStream(client: ClobClient | null, config: AppConfig):
     onConnect(rtClient) {
       console.log(`${fmtTime()} | stream connected, watching ${target}`);
       rtClient.subscribe({
-        subscriptions: [{ topic: "activity", type: "trades" }],
+        subscriptions: [{
+          topic: "activity",
+          type: "trades",
+          // Filter events to the specific target wallet; without this the server
+          // delivers nothing for third-party wallets.
+          gamma_auth: { address: target },
+        }],
       });
+
+      // The library's built-in ping cycle is broken (assigns ws.pong as a
+      // property instead of registering an event listener, so onPong never
+      // fires). Roll our own keepalive so the server doesn't close with 1006.
+      const ws = (rtClient as unknown as { ws: { readyState: number; send: (d: string) => void } }).ws;
+      const keepalive = setInterval(() => {
+        if (ws.readyState === 1 /* OPEN */) {
+          ws.send("ping");
+        } else {
+          clearInterval(keepalive);
+        }
+      }, 30_000);
     },
     onMessage(_, message) {
       if (message.topic !== "activity" || message.type !== "trades") return;

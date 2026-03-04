@@ -30,6 +30,8 @@ const ERC1155_ABI = [
 ];
 
 const DRY_RUN = process.argv.includes("--dry-run");
+// --force: sell ALL live wallet positions regardless of DB state
+const FORCE = process.argv.includes("--force");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -71,6 +73,7 @@ function bestBid(bids: Array<{ price: string; size: string }>): number {
 
 async function main(): Promise<void> {
   if (DRY_RUN) console.log("── DRY RUN — no orders will be placed ──\n");
+  if (FORCE) console.log("── FORCE MODE — selling all live wallet positions (ignoring DB) ──\n");
   initDb();
 
   const config = loadConfig();
@@ -94,8 +97,9 @@ async function main(): Promise<void> {
 
   // ── Step 1: assets we hold according to the DB ──────────────────────────
   const dbFills = getMyOpenFills();
-  if (dbFills.length === 0) {
+  if (!FORCE && dbFills.length === 0) {
     console.log("No FILLED BUY positions in DB — nothing to sell.");
+    console.log("Tip: use --force to sell all live wallet positions regardless of DB.");
     return;
   }
   const dbAssets = new Set(dbFills.map((f) => f.asset_id));
@@ -113,11 +117,13 @@ async function main(): Promise<void> {
     negativeRisk: boolean;
   }>;
 
-  // Keep only positions whose asset_id appears in our DB
-  const toSell = livePositions.filter((p) => dbAssets.has(p.asset));
+  // In force mode sell everything; otherwise filter by DB
+  const toSell = FORCE
+    ? livePositions.filter((p) => p.size > 0)
+    : livePositions.filter((p) => dbAssets.has(p.asset));
 
   if (toSell.length === 0) {
-    console.log("No live positions found matching DB fills — already sold or market resolved.");
+    console.log("No live positions found" + (FORCE ? " in wallet" : " matching DB fills") + " — already sold or market resolved.");
     return;
   }
 

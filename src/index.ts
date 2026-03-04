@@ -67,7 +67,28 @@ async function run() {
   if (targets.length === 1) {
     console.log(monitorOnly ? "Monitor" : config.simulationMode ? "Simulation" : "Subscribe", "| 1 target");
     if (!monitorOnly) runActivityStream(client, config);
-    runPositionsUiPoll(config);
+    // Also run position polling for single targets: it reliably detects new
+    // positions via size deltas and acts as a fallback if the websocket
+    // misses an event.
+    runPositionPolling(config, (trade, fromUser) => {
+      if (monitorOnly) return;
+      if (!shouldCopyTrade(config, trade)) return;
+      if (config.simulationMode) {
+        logTrade("SIM", trade, { targetAddress: fromUser, copyStatus: "skipped" });
+      } else if (client) {
+        copyTrade(client, trade, config.copy.sizeMultiplier, config.chainId, config.filter.buyAmountLimitInUsd, fromUser)
+          .then((filled) => {
+            if (filled == null) { logTrade("LIVE", trade, { targetAddress: fromUser, copyStatus: "skip" }); return; }
+            if (trade.side === "BUY") recordEntry(trade.asset_id, filled.size, filled.price);
+            logTrade("LIVE", trade, { targetAddress: fromUser, copyStatus: "ok", amountUsd: filled.amountUsd });
+          })
+          .catch((e) => {
+            logTrade("LIVE", trade, { targetAddress: fromUser, copyStatus: "FAILED" });
+            console.error("  ", e?.message ?? e);
+          });
+      }
+    });
+    // runPositionsUiPoll not needed — runPositionPolling already calls setPositions
   } else {
     console.log(monitorOnly ? "Monitor" : config.simulationMode ? "Simulation" : "Polling", `| ${targets.length} targets`);
     runPositionPolling(config, (trade, fromUser) => {

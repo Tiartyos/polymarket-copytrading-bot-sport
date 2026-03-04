@@ -52,9 +52,13 @@ cp .env.example .env
 
 # 2. (Optional) edit trade.toml for targets / filters
 
-# 3. Build and run
-docker compose up --build
+# 3. Build and run — always use --build to pick up config changes
+npm run docker:up
+# equivalent: docker compose up --build -d
 ```
+
+> **Important:** always pass `--build` (or use `npm run docker:up`).  
+> Plain `docker compose up -d` reuses a cached image and will NOT pick up changes to `trade.toml` or source files.
 
 The UI will be available at <http://localhost:8000>.
 
@@ -71,6 +75,15 @@ To stop:
 
 ```bash
 docker compose down
+```
+
+### Reset the database (Docker)
+
+The database lives in the `bot-data` named volume. Wipe it when you want a clean slate (e.g. stale FILLED records after a manual sell):
+
+```bash
+npm run docker:reset
+# equivalent: docker compose down && docker volume rm polymarket-copytrading-bot-sport-fork_bot-data && docker compose up --build -d
 ```
 
 ### Custom port

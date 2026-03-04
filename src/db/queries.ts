@@ -28,6 +28,22 @@ interface CopiedTradeRow {
 }
 
 /**
+ * Returns true if we already have a FILLED BUY for this asset from this leader.
+ * Used by the startup position sync to avoid re-buying existing positions after restart.
+ */
+export function hasFilledBuyForAsset(leaderAddress: string, assetId: string): boolean {
+  const db = getDb();
+  const row = db
+    .prepare(
+      `SELECT 1 FROM copied_trades
+       WHERE leader_address = ? AND asset_id = ? AND side = 'BUY' AND status = 'FILLED'
+       LIMIT 1`
+    )
+    .get(leaderAddress.toLowerCase(), assetId) as { 1: number } | undefined;
+  return row != null;
+}
+
+/**
  * Returns true if this trade ID was already FILLED — skip copying.
  * PENDING/FAILED records are allowed to retry.
  */
