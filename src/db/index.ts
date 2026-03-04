@@ -17,6 +17,17 @@ export function initDb(dataDir = "data"): void {
   db.pragma("journal_mode = WAL");
   db.pragma("synchronous = NORMAL");
   runMigrations(db);
+  // Reconcile stale PENDING trades from a previous crashed run.
+  // FOK orders are instantaneous — any PENDING left over means the process died
+  // before receiving the response, so we can't know if it filled. Reset to FAILED
+  // so these will be retried (duplicate-prevention still guards against re-copy on
+  // the same leader_trade_id if the order actually went through).
+  const staleResult = db
+    .prepare(`UPDATE copied_trades SET status='FAILED', updated_at=datetime('now') WHERE status='PENDING'`)
+    .run();
+  if (staleResult.changes > 0) {
+    console.log(`[DB] Reconciled ${staleResult.changes} stale PENDING trade(s) → FAILED`);
+  }
   console.log(`[DB] Initialized at ${dbPath}`);
 }
 

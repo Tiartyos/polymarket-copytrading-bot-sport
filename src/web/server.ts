@@ -2,6 +2,7 @@ import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
 import { getState } from "./state";
+import { getRecentTrades, getTradeById } from "../db/queries";
 
 const FALLBACK_PUBLIC = path.join(__dirname, "public");
 const UI_DIST = path.join(process.cwd(), "frontend", "dist");
@@ -24,10 +25,66 @@ const MIMES: Record<string, string> = {
 
 export function startWebServer(port: number): void {
   const server = http.createServer((req, res) => {
-    if (req.url === "/api/state" || req.url?.startsWith("/api/state?")) {
+    const url = req.url ?? "/";
+    const urlPath = url.split("?")[0];
+
+    // ── Health check ──────────────────────────────────────────────────────────
+    if (urlPath === "/api/health") {
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.end(JSON.stringify({ status: "ok", timestamp: new Date().toISOString() }));
+      return;
+    }
+
+    // ── Bot state ─────────────────────────────────────────────────────────────
+    if (urlPath === "/api/state") {
       res.setHeader("Content-Type", "application/json");
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.end(JSON.stringify(getState()));
+      return;
+    }
+
+    // ── Trade history ─────────────────────────────────────────────────────────
+    if (urlPath === "/api/trades") {
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      try {
+        const qs = new URLSearchParams(url.includes("?") ? url.split("?")[1] : "");
+        const limit = Math.min(parseInt(qs.get("limit") ?? "100", 10), 500);
+        res.end(JSON.stringify(getRecentTrades(limit)));
+      } catch {
+        res.statusCode = 500;
+        res.end(JSON.stringify({ error: "db unavailable" }));
+      }
+      return;
+    }
+
+    // ── Single trade by id ───────────────────────────────────────────────────
+    const tradeMatch = urlPath.match(/^\/api\/trades\/(\d+)$/);
+    if (tradeMatch) {
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      try {
+        const trade = getTradeById(parseInt(tradeMatch[1], 10));
+        if (!trade) {
+          res.statusCode = 404;
+          res.end(JSON.stringify({ error: "not found" }));
+        } else {
+          res.end(JSON.stringify(trade));
+        }
+      } catch {
+        res.statusCode = 500;
+        res.end(JSON.stringify({ error: "db unavailable" }));
+      }
+      return;
+    }
+
+    if (req.method === "OPTIONS") {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+      res.statusCode = 204;
+      res.end();
       return;
     }
     const publicDir = getPublicDir();

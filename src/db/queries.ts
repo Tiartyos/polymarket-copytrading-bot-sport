@@ -121,3 +121,34 @@ export function getTradesByStatus(status: TradeStatus): CopiedTradeRow[] {
     .prepare("SELECT * FROM copied_trades WHERE status = ? ORDER BY created_at DESC")
     .all(status) as CopiedTradeRow[];
 }
+
+export function getTradeById(id: number): CopiedTradeRow | undefined {
+  const db = getDb();
+  return db
+    .prepare("SELECT * FROM copied_trades WHERE id = ?")
+    .get(id) as CopiedTradeRow | undefined;
+}
+
+export function getTradeByTxHash(txHash: string): CopiedTradeRow | undefined {
+  const db = getDb();
+  return db
+    .prepare("SELECT * FROM copied_trades WHERE transaction_hash = ?")
+    .get(txHash) as CopiedTradeRow | undefined;
+}
+
+/**
+ * On startup: any trade still PENDING is stale (bot crashed before execution
+ * result was received). Since FOK orders are fire-and-forget, we cannot safely
+ * assume they filled — mark them FAILED so they're eligible for retry.
+ */
+export function reconcileStalePending(): number {
+  const db = getDb();
+  const result = db
+    .prepare(
+      `UPDATE copied_trades
+       SET status = 'FAILED', updated_at = datetime('now')
+       WHERE status = 'PENDING'`
+    )
+    .run();
+  return result.changes;
+}
