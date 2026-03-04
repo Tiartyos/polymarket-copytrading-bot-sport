@@ -4,6 +4,7 @@ import * as path from "path";
 import { getState, getClient, getBotPositionSizes, getChainId } from "./state";
 import { getRecentTrades, getTradeById, getMyOpenFills } from "../db/queries";
 import { ensureCtfApproval } from "../config/client";
+import { DATA_API } from "../constant";
 
 const FALLBACK_PUBLIC = path.join(__dirname, "public");
 const UI_DIST = path.join(process.cwd(), "frontend", "dist");
@@ -109,9 +110,9 @@ export function startWebServer(port: number): void {
       req.on("end", async () => {
         try {
           const { asset_id, size, price } = JSON.parse(body) as { asset_id: string; size: number; price: number };
-          if (!asset_id || !size || !price) {
+          if (!asset_id || !size) {
             res.statusCode = 400;
-            res.end(JSON.stringify({ success: false, error: "asset_id, size and price are required" }));
+            res.end(JSON.stringify({ success: false, error: "asset_id and size are required" }));
             return;
           }
           const client = getClient();
@@ -120,24 +121,60 @@ export function startWebServer(port: number): void {
             res.end(JSON.stringify({ success: false, error: "Bot is in simulation mode — no client available" }));
             return;
           }
-          const { OrderType, Side } = await import("@polymarket/clob-client");
-          // Ensure ERC-1155 setApprovalForAll is set — no-op if already approved, fixes sells after monitor-mode startup
-          const pk = process.env.WALLET_PRIVATE_KEY;
-          if (pk) {
-            await ensureCtfApproval(pk, getChainId()).catch((e: unknown) => {
-              console.error("[CTF] Pre-sell approval failed:", e instanceof Error ? e.message : e);
-            });
+
+          let amount = Number(size);
+          if (!Number.isFinite(amount) || amount <= 0) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ success: false, error: "size must be a positive number" }));
+            return;
           }
+
+          const walletAddress = getState().status.wallet;
+          if (walletAddress) {
+            try {
+              const liveResp = await fetch(`${DATA_API}/positions?user=${encodeURIComponent(walletAddress)}&limit=500`);
+              if (liveResp.ok) {
+                const livePositions = (await liveResp.json()) as Array<{ asset: string; size: number }>;
+                const live = livePositions.find((p) => p.asset === asset_id);
+                if (live && Number.isFinite(live.size)) {
+                  amount = Math.min(amount, Number(live.size));
+                }
+              }
+            } catch {
+              const cachedLive = getBotPositionSizes().get(asset_id);
+              if (cachedLive != null && Number.isFinite(cachedLive)) {
+                amount = Math.min(amount, Number(cachedLive));
+              }
+            }
+          }
+
+          amount = Number(amount.toFixed(6));
+          if (!Number.isFinite(amount) || amount <= 0) {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ success: false, error: "No live balance available for this asset" }));
+            return;
+          }
+
+          const { OrderType, Side } = await import("@polymarket/clob-client");
+          const pk = process.env.WALLET_PRIVATE_KEY;
+          if (!pk) {
+            res.statusCode = 500;
+            res.end(JSON.stringify({ success: false, error: "WALLET_PRIVATE_KEY is missing in environment" }));
+            return;
+          }
+
+          await ensureCtfApproval(pk, getChainId());
+
           const tickSize = await client.getTickSize(asset_id);
           const negRisk = await client.getNegRisk(asset_id);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const resp: any = await client.createAndPostMarketOrder(
-            { tokenID: asset_id, amount: size, side: Side.SELL, orderType: OrderType.FOK },
+            { tokenID: asset_id, amount, side: Side.SELL, orderType: OrderType.FOK },
             { tickSize, negRisk },
             OrderType.FOK
           );
           const txHash = resp?.transactionsHashes?.[0] ?? resp?.transactionHash ?? resp?.transaction_hash ?? null;
-          res.end(JSON.stringify({ success: true, transaction_hash: txHash }));
+          res.end(JSON.stringify({ success: true, transaction_hash: txHash, sold_amount: amount, requested_amount: size, price }));
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
           res.statusCode = 500;
