@@ -75,8 +75,12 @@ export function runActivityStream(client: ClobClient | null, config: AppConfig):
           config.copy.targetAddress
         )
           .then((filled) => {
-            if (filled && trade.side === "BUY") recordEntry(trade.asset_id, filled.size, filled.price);
-            logTrade("LIVE", trade, { targetAddress: config.copy.targetAddress, copyStatus: "ok", amountUsd: filled != null ? filled.amountUsd : undefined });
+            if (filled == null) {
+              logTrade("LIVE", trade, { targetAddress: config.copy.targetAddress, copyStatus: "skip" });
+              return;
+            }
+            if (trade.side === "BUY") recordEntry(trade.asset_id, filled.size, filled.price);
+            logTrade("LIVE", trade, { targetAddress: config.copy.targetAddress, copyStatus: "ok", amountUsd: filled.amountUsd });
           })
           .catch((e) => {
             logTrade("LIVE", trade, { targetAddress: config.copy.targetAddress, copyStatus: "FAILED" });

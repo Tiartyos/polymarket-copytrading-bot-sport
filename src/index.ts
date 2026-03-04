@@ -2,8 +2,9 @@ import { loadConfig } from "./config";
 import { createClient, ensureUsdcApproval } from "./config/client";
 import { runActivityStream, logTrade, runPositionPolling, runPositionsUiPoll } from "./realtime";
 import { copyTrade, shouldCopyTrade, recordEntry, runExitLoop } from "./trading";
-import { startWebServer, setStatus, setUiConfig, setClient } from "./web";
+import { startWebServer, setStatus, setUiConfig, setClient, setBotPositionSizes } from "./web";
 import { initDb } from "./db";
+import { DATA_API } from "./constant";
 
 async function run() {
   const config = loadConfig();
@@ -45,6 +46,21 @@ async function run() {
   if (config.ui) setUiConfig(config.ui);
   startWebServer(config.port);
 
+  // ── Poll bot wallet's live positions so UI knows which fills are still open ──
+  if (!config.simulationMode && config.walletAddress) {
+    const botAddr = config.walletAddress.toLowerCase();
+    const pollBotPositions = async () => {
+      try {
+        const res = await fetch(`${DATA_API}/positions?user=${encodeURIComponent(botAddr)}&limit=500`);
+        if (!res.ok) return;
+        const data = (await res.json()) as { asset: string; size: number }[];
+        setBotPositionSizes(data.map((p) => ({ asset: p.asset, size: p.size })));
+      } catch { /* ignore */ }
+    };
+    pollBotPositions();
+    setInterval(pollBotPositions, 30_000);
+  }
+
   if (targets.length === 1) {
     console.log(config.simulationMode ? "Simulation" : "Subscribe", "| 1 target");
     runActivityStream(client, config);
@@ -65,8 +81,12 @@ async function run() {
           fromUser
         )
           .then((filled) => {
-            if (filled && trade.side === "BUY") recordEntry(trade.asset_id, filled.size, filled.price);
-            logTrade("LIVE", trade, { targetAddress: fromUser, copyStatus: "ok", amountUsd: filled != null ? filled.amountUsd : undefined });
+            if (filled == null) {
+              logTrade("LIVE", trade, { targetAddress: fromUser, copyStatus: "skip" });
+              return;
+            }
+            if (trade.side === "BUY") recordEntry(trade.asset_id, filled.size, filled.price);
+            logTrade("LIVE", trade, { targetAddress: fromUser, copyStatus: "ok", amountUsd: filled.amountUsd });
           })
           .catch((e) => {
             logTrade("LIVE", trade, { targetAddress: fromUser, copyStatus: "FAILED" });

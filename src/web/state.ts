@@ -117,6 +117,20 @@ export function setPositions(user: string, positions: { asset_id?: string; slug?
   }
 }
 
+/** asset_id → current live size for the bot wallet (from Polymarket data API) */
+const botPositionSizes: Map<string, number> = new Map();
+
+export function setBotPositionSizes(positions: { asset: string; size: number }[]): void {
+  botPositionSizes.clear();
+  for (const p of positions) {
+    if (p.size > 0) botPositionSizes.set(p.asset, p.size);
+  }
+}
+
+export function getBotPositionSizes(): Map<string, number> {
+  return botPositionSizes;
+}
+
 export function getState(): { logs: TradeLog[]; status: typeof status; positions: typeof positionsByUser; ui: typeof uiConfig } {
   return { logs: [...logs], status, positions: { ...positionsByUser }, ui: { ...uiConfig } };
 }

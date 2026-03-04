@@ -1,7 +1,7 @@
 import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
-import { getState, getClient } from "./state";
+import { getState, getClient, getBotPositionSizes } from "./state";
 import { getRecentTrades, getTradeById, getMyOpenFills } from "../db/queries";
 
 const FALLBACK_PUBLIC = path.join(__dirname, "public");
@@ -44,12 +44,19 @@ export function startWebServer(port: number): void {
       return;
     }
 
-    // ── My open positions (filled buys from DB) ───────────────────────────────
+    // ── My open positions (filled buys from DB, filtered to currently-held assets) ─────
     if (urlPath === "/api/my-positions") {
       res.setHeader("Content-Type", "application/json");
       res.setHeader("Access-Control-Allow-Origin", "*");
       try {
-        res.end(JSON.stringify(getMyOpenFills()));
+        const fills = getMyOpenFills();
+        const live = getBotPositionSizes();
+        // If we have live data, only show positions the bot wallet still holds.
+        // If live cache is empty (e.g. simulation / not yet polled), show all DB fills.
+        const result = live.size > 0
+          ? fills.filter((f) => live.has(f.asset_id))
+          : fills;
+        res.end(JSON.stringify(result));
       } catch {
         res.statusCode = 500;
         res.end(JSON.stringify({ error: "db unavailable" }));
