@@ -26,11 +26,14 @@ export interface PositionSummary {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _client: any = null;
+let _chainId = 137;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function setClient(c: any): void { _client = c; }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function getClient(): any { return _client; }
+export function setChainId(id: number): void { _chainId = id; }
+export function getChainId(): number { return _chainId; }
 
 const MAX_LOGS = 500;
 const logs: TradeLog[] = [];

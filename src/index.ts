@@ -2,7 +2,7 @@ import { loadConfig } from "./config";
 import { createClient, ensureUsdcApproval } from "./config/client";
 import { runActivityStream, logTrade, runPositionPolling, runPositionsUiPoll } from "./realtime";
 import { copyTrade, shouldCopyTrade, recordEntry, runExitLoop } from "./trading";
-import { startWebServer, setStatus, setUiConfig, setClient, setBotPositionSizes } from "./web";
+import { startWebServer, setStatus, setUiConfig, setClient, setChainId, setBotPositionSizes } from "./web";
 import { initDb } from "./db";
 import { DATA_API } from "./constant";
 
@@ -31,6 +31,7 @@ async function run() {
 
   const client = config.simulationMode ? null : await createClient(config);
   if (client) setClient(client);
+  setChainId(config.chainId);
 
   // ── Verify USDC balance and exchange allowance, approve if needed ──────────
   if (!config.simulationMode && config.walletPrivateKey) {

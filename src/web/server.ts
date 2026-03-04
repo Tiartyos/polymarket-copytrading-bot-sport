@@ -1,8 +1,9 @@
 import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
-import { getState, getClient, getBotPositionSizes } from "./state";
+import { getState, getClient, getBotPositionSizes, getChainId } from "./state";
 import { getRecentTrades, getTradeById, getMyOpenFills } from "../db/queries";
+import { ensureCtfApproval } from "../config/client";
 
 const FALLBACK_PUBLIC = path.join(__dirname, "public");
 const UI_DIST = path.join(process.cwd(), "frontend", "dist");
@@ -120,6 +121,13 @@ export function startWebServer(port: number): void {
             return;
           }
           const { OrderType, Side } = await import("@polymarket/clob-client");
+          // Ensure ERC-1155 setApprovalForAll is set — no-op if already approved, fixes sells after monitor-mode startup
+          const pk = process.env.WALLET_PRIVATE_KEY;
+          if (pk) {
+            await ensureCtfApproval(pk, getChainId()).catch((e: unknown) => {
+              console.error("[CTF] Pre-sell approval failed:", e instanceof Error ? e.message : e);
+            });
+          }
           const tickSize = await client.getTickSize(asset_id);
           const negRisk = await client.getNegRisk(asset_id);
           // eslint-disable-next-line @typescript-eslint/no-explicit-any

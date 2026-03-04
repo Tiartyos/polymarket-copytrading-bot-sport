@@ -122,6 +122,46 @@ export async function ensureUsdcApproval(walletPrivateKey: string, chainId: numb
   }
 }
 
+/** Ensure the CTF exchange contracts have setApprovalForAll on the conditional
+ *  token contract. Called lazily before sell orders so it works regardless of
+ *  startup mode. Safe to call repeatedly — no-ops if already approved. */
+export async function ensureCtfApproval(walletPrivateKey: string, chainId: number): Promise<void> {
+  if (chainId !== 137) return;
+  const provider = new JsonRpcProvider(POLYGON_RPC);
+  const pk = walletPrivateKey.startsWith("0x") ? walletPrivateKey : "0x" + walletPrivateKey;
+  const signer = new Wallet(pk, provider);
+  const owner = await signer.getAddress();
+  const ctf = new Contract(CTF_TOKEN_CONTRACT, ERC1155_ABI, signer);
+
+  const feeData = await provider.getFeeData();
+  const minPriority = BigNumber.from("30000000000");
+  const currentPriority = feeData.maxPriorityFeePerGas ?? BigNumber.from(0);
+  const gasOverrides: { maxPriorityFeePerGas: BigNumber; maxFeePerGas?: BigNumber } = {
+    maxPriorityFeePerGas: currentPriority.gt(minPriority) ? currentPriority : minPriority,
+  };
+  if (feeData.maxFeePerGas) {
+    gasOverrides.maxFeePerGas = feeData.maxFeePerGas.add(gasOverrides.maxPriorityFeePerGas);
+  }
+
+  for (const operator of [CTF_EXCHANGE, NEG_RISK_CTF_EXCHANGE, NEG_RISK_ADAPTER]) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const approved: any = await ctf.isApprovedForAll(owner, operator);
+    if (!approved) {
+      const label = operator === CTF_EXCHANGE ? "CTF Exchange" : operator === NEG_RISK_CTF_EXCHANGE ? "NegRisk Exchange" : "NegRisk Adapter";
+      console.log(`[CTF] setApprovalForAll → ${label} (lazy, triggered by sell) …`);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const tx: any = await ctf.setApprovalForAll(operator, true, gasOverrides);
+        await tx.wait();
+        console.log(`[CTF] Approved ${label} ✓`);
+      } catch (e: any) {
+        console.error(`[CTF] ApproveAll ${label} failed: ${e.reason ?? e.message}`);
+        throw new Error(`CTF approval failed for ${label}: ${e.reason ?? e.message}`);
+      }
+    }
+  }
+}
+
 export async function createClient(config: AppConfig): Promise<ClobClient> {
   const { clobHost, chainId, walletPrivateKey, proxyWalletAddress, signatureType } = config;
   const chain = chainId === 137 ? Chain.POLYGON : Chain.AMOY;
