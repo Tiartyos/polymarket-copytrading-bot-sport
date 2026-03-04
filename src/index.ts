@@ -1,10 +1,12 @@
 import { loadConfig } from "./config";
 import { createClient, ensureUsdcApproval } from "./config/client";
-import { runActivityStream, logTrade, runPositionPolling, runPositionsUiPoll } from "./realtime";
+import { runActivityStream, logTrade, runPositionPolling } from "./realtime";
 import { copyTrade, shouldCopyTrade, recordEntry, runExitLoop } from "./trading";
-import { startWebServer, setStatus, setUiConfig, setClient, setChainId, setBotPositionSizes } from "./web";
+import { startWebServer, setStatus, setUiConfig, setClient, setChainId, setBotPositionSizes, getBotPositionSizes } from "./web";
 import { initDb } from "./db";
+import { hasFilledBuyForAsset } from "./db/queries";
 import { DATA_API } from "./constant";
+import type { LeaderTrade } from "./types";
 
 async function run() {
   const monitorOnly = process.argv.includes("--monitor");
@@ -64,64 +66,61 @@ async function run() {
     setInterval(pollBotPositions, 30_000);
   }
 
+  // ── Shared polling callback ───────────────────────────────────────────────
+  // For BUYs: run through normal filters.
+  // For SELLs: if we hold a copied position for this asset, ALWAYS exit it
+  //   (bypass revert_trade — that flag only prevents copying arbitrary sells
+  //   of things we don't hold). Use the bot's actual held size so we sell
+  //   exactly what we own, not a scaled fraction of the leader's delta.
+  function handlePolledTrade(trade: LeaderTrade, fromUser: string): void {
+    if (monitorOnly) return;
+
+    if (trade.side === "SELL") {
+      const botSize = getBotPositionSizes().get(trade.asset_id) ?? 0;
+      const weHold = botSize > 0 && hasFilledBuyForAsset(fromUser, trade.asset_id);
+      if (!weHold) {
+        // We don't hold this asset — respect the revert_trade filter
+        if (!config.copy.revertTrade) {
+          logTrade("SKIP", trade, { targetAddress: fromUser, copyStatus: "revert_trade=false" });
+          return;
+        }
+      } else {
+        // Override: sell exactly what we hold at current price
+        trade = { ...trade, size: String(botSize) };
+        logTrade("EXIT", trade, { targetAddress: fromUser, copyStatus: "leader exited" });
+      }
+    }
+
+    if (!shouldCopyTrade(config, trade)) return;
+
+    if (config.simulationMode) {
+      logTrade("SIM", trade, { targetAddress: fromUser, copyStatus: "skipped" });
+    } else if (client) {
+      // For exit SELLs use multiplier=1 (we already sized to our exact holding)
+      const mult = trade.side === "SELL" ? 1.0 : config.copy.sizeMultiplier;
+      copyTrade(client, trade, mult, config.chainId, config.filter.buyAmountLimitInUsd, fromUser)
+        .then((filled) => {
+          if (filled == null) { logTrade("LIVE", trade, { targetAddress: fromUser, copyStatus: "skip" }); return; }
+          if (trade.side === "BUY") recordEntry(trade.asset_id, filled.size, filled.price);
+          logTrade("LIVE", trade, { targetAddress: fromUser, copyStatus: "ok", amountUsd: filled.amountUsd });
+        })
+        .catch((e) => {
+          logTrade("LIVE", trade, { targetAddress: fromUser, copyStatus: "FAILED" });
+          console.error("  ", e?.message ?? e);
+        });
+    }
+  }
+
   if (targets.length === 1) {
     console.log(monitorOnly ? "Monitor" : config.simulationMode ? "Simulation" : "Subscribe", "| 1 target");
     if (!monitorOnly) runActivityStream(client, config);
-    // Also run position polling for single targets: it reliably detects new
-    // positions via size deltas and acts as a fallback if the websocket
-    // misses an event.
-    runPositionPolling(config, (trade, fromUser) => {
-      if (monitorOnly) return;
-      if (!shouldCopyTrade(config, trade)) return;
-      if (config.simulationMode) {
-        logTrade("SIM", trade, { targetAddress: fromUser, copyStatus: "skipped" });
-      } else if (client) {
-        copyTrade(client, trade, config.copy.sizeMultiplier, config.chainId, config.filter.buyAmountLimitInUsd, fromUser)
-          .then((filled) => {
-            if (filled == null) { logTrade("LIVE", trade, { targetAddress: fromUser, copyStatus: "skip" }); return; }
-            if (trade.side === "BUY") recordEntry(trade.asset_id, filled.size, filled.price);
-            logTrade("LIVE", trade, { targetAddress: fromUser, copyStatus: "ok", amountUsd: filled.amountUsd });
-          })
-          .catch((e) => {
-            logTrade("LIVE", trade, { targetAddress: fromUser, copyStatus: "FAILED" });
-            console.error("  ", e?.message ?? e);
-          });
-      }
-    });
+    runPositionPolling(config, handlePolledTrade);
     // runPositionsUiPoll not needed — runPositionPolling already calls setPositions
   } else {
     console.log(monitorOnly ? "Monitor" : config.simulationMode ? "Simulation" : "Polling", `| ${targets.length} targets`);
-    runPositionPolling(config, (trade, fromUser) => {
-      if (monitorOnly) return;
-      if (!shouldCopyTrade(config, trade)) return;
-      if (config.simulationMode) {
-        logTrade("SIM", trade, { targetAddress: fromUser, copyStatus: "skipped" });
-      } else if (client) {
-        copyTrade(
-          client,
-          trade,
-          config.copy.sizeMultiplier,
-          config.chainId,
-          config.filter.buyAmountLimitInUsd,
-          fromUser
-        )
-          .then((filled) => {
-            if (filled == null) {
-              logTrade("LIVE", trade, { targetAddress: fromUser, copyStatus: "skip" });
-              return;
-            }
-            if (trade.side === "BUY") recordEntry(trade.asset_id, filled.size, filled.price);
-            logTrade("LIVE", trade, { targetAddress: fromUser, copyStatus: "ok", amountUsd: filled.amountUsd });
-          })
-          .catch((e) => {
-            logTrade("LIVE", trade, { targetAddress: fromUser, copyStatus: "FAILED" });
-            console.error("  ", e?.message ?? e);
-          });
-      }
-    });
+    runPositionPolling(config, handlePolledTrade);
   }
 }
-
 run().catch((e) => {
   console.error(e);
   process.exit(1);
