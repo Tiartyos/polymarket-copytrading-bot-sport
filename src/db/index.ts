@@ -34,24 +34,27 @@ export function initDb(dataDir = "data"): void {
 function runMigrations(database: Database.Database): void {
   database.exec(`
     CREATE TABLE IF NOT EXISTS copied_trades (
-      id                INTEGER PRIMARY KEY AUTOINCREMENT,
-      leader_trade_id   TEXT    NOT NULL UNIQUE,
-      leader_address    TEXT    NOT NULL,
-      asset_id          TEXT    NOT NULL,
-      market_id         TEXT    NOT NULL,
-      side              TEXT    NOT NULL,
-      size              TEXT    NOT NULL,
-      price             TEXT    NOT NULL,
-      amount_usd        TEXT    NOT NULL,
-      transaction_hash  TEXT,
-      status            TEXT    NOT NULL DEFAULT 'PENDING',
-      timestamp         TEXT    NOT NULL,
-      entry_price       TEXT,
-      exit_price        TEXT,
-      pnl               TEXT,
-      pnl_pct           TEXT,
-      created_at        TEXT    DEFAULT (datetime('now')),
-      updated_at        TEXT    DEFAULT (datetime('now'))
+      id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+      leader_trade_id      TEXT    NOT NULL UNIQUE,
+      leader_address       TEXT    NOT NULL,
+      asset_id             TEXT    NOT NULL,
+      market_id            TEXT    NOT NULL,
+      side                 TEXT    NOT NULL,
+      size                 TEXT    NOT NULL,
+      price                TEXT    NOT NULL,
+      amount_usd           TEXT    NOT NULL,
+      -- Polymarket internal order ID (off-chain abstraction, visible in Polymarket API)
+      polymarket_order_id  TEXT,
+      -- Real on-chain Polygon transaction hash — verifiable on Polygonscan
+      transaction_hash     TEXT,
+      status               TEXT    NOT NULL DEFAULT 'PENDING',
+      timestamp            TEXT    NOT NULL,
+      entry_price          TEXT,
+      exit_price           TEXT,
+      pnl                  TEXT,
+      pnl_pct              TEXT,
+      created_at           TEXT    DEFAULT (datetime('now')),
+      updated_at           TEXT    DEFAULT (datetime('now'))
     );
 
     CREATE INDEX IF NOT EXISTS idx_leader_trade_id ON copied_trades(leader_trade_id);
@@ -59,4 +62,11 @@ function runMigrations(database: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_timestamp       ON copied_trades(timestamp);
     CREATE INDEX IF NOT EXISTS idx_status          ON copied_trades(status);
   `);
+
+  // Migration: add polymarket_order_id to existing databases that predate this column.
+  const cols = database.pragma("table_info(copied_trades)") as { name: string }[];
+  if (!cols.some((c) => c.name === "polymarket_order_id")) {
+    database.exec(`ALTER TABLE copied_trades ADD COLUMN polymarket_order_id TEXT;`);
+    console.log("[DB] Migrated: added polymarket_order_id column");
+  }
 }

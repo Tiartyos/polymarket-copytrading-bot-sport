@@ -13,6 +13,9 @@ interface CopiedTradeRow {
   size: string;
   price: string;
   amount_usd: string;
+  /** Polymarket internal order ID — off-chain abstraction, visible in Polymarket API */
+  polymarket_order_id: string | null;
+  /** Real on-chain Polygon transaction hash — verifiable on Polygonscan */
   transaction_hash: string | null;
   status: TradeStatus;
   timestamp: string;
@@ -69,21 +72,25 @@ export function insertCopiedTrade(
 }
 
 /**
- * Updates the status (and optionally txHash) of a trade record.
+ * Updates the status, and optionally the Polymarket order ID and on-chain tx hash.
+ * @param txHash         Real Polygon transaction hash (verifiable on Polygonscan)
+ * @param polymarketOrderId  Polymarket's internal orderID (off-chain layer)
  */
 export function updateTradeStatus(
   leaderTradeId: string,
   status: TradeStatus,
-  txHash?: string
+  txHash?: string,
+  polymarketOrderId?: string
 ): void {
   const db = getDb();
   db.prepare(
     `UPDATE copied_trades
      SET status = ?,
-         transaction_hash = COALESCE(?, transaction_hash),
+         transaction_hash     = COALESCE(?, transaction_hash),
+         polymarket_order_id  = COALESCE(?, polymarket_order_id),
          updated_at = datetime('now')
      WHERE leader_trade_id = ?`
-  ).run(status, txHash ?? null, leaderTradeId);
+  ).run(status, txHash ?? null, polymarketOrderId ?? null, leaderTradeId);
 }
 
 /**

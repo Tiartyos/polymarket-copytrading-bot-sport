@@ -7,6 +7,7 @@ import { initDb } from "./db";
 import { DATA_API } from "./constant";
 
 async function run() {
+  const monitorOnly = process.argv.includes("--monitor");
   const config = loadConfig();
 
   // Initialize persistence layer — must happen before any trade logic
@@ -17,7 +18,7 @@ async function run() {
     console.error("No targets. Set copy.target_address in trade.toml");
     process.exit(1);
   }
-  if (!config.simulationMode) {
+  if (!config.simulationMode && !monitorOnly) {
     if (!config.walletPrivateKey) {
       console.error("No wallet. Set WALLET_PRIVATE_KEY in .env");
       process.exit(1);
@@ -28,23 +29,24 @@ async function run() {
     }
   }
 
-  const client = config.simulationMode ? null : await createClient(config);
+  const client = (config.simulationMode || monitorOnly) ? null : await createClient(config);
   if (client) setClient(client);
 
   // ── Verify USDC balance and exchange allowance, approve if needed ──────────
-  if (!config.simulationMode && config.walletPrivateKey) {
+  if (!config.simulationMode && !monitorOnly && config.walletPrivateKey) {
     await ensureUsdcApproval(config.walletPrivateKey, config.chainId).catch((e) =>
       console.error("[USDC] Allowance check failed:", e?.message ?? e)
     );
   }
 
-  if (client && (config.exit.takeProfit > 0 || config.exit.stopLoss > 0 || config.exit.trailingStop > 0)) {
+  if (!monitorOnly && client && (config.exit.takeProfit > 0 || config.exit.stopLoss > 0 || config.exit.trailingStop > 0)) {
     runExitLoop(client, config);
   }
 
-  setStatus(config.simulationMode ? "Sim" : "Live", targets.length, config.walletAddress, targets);
+  setStatus(monitorOnly ? "Monitor" : config.simulationMode ? "Sim" : "Live", targets.length, config.walletAddress, targets);
   if (config.ui) setUiConfig(config.ui);
   startWebServer(config.port);
+  if (monitorOnly) console.log("[MONITOR] Read-only mode — no orders will be placed");
 
   // ── Poll bot wallet's live positions so UI knows which fills are still open ──
   if (!config.simulationMode && config.walletAddress) {
@@ -62,12 +64,13 @@ async function run() {
   }
 
   if (targets.length === 1) {
-    console.log(config.simulationMode ? "Simulation" : "Subscribe", "| 1 target");
-    runActivityStream(client, config);
+    console.log(monitorOnly ? "Monitor" : config.simulationMode ? "Simulation" : "Subscribe", "| 1 target");
+    if (!monitorOnly) runActivityStream(client, config);
     runPositionsUiPoll(config);
   } else {
-    console.log(config.simulationMode ? "Simulation" : "Polling", `| ${targets.length} targets`);
+    console.log(monitorOnly ? "Monitor" : config.simulationMode ? "Simulation" : "Polling", `| ${targets.length} targets`);
     runPositionPolling(config, (trade, fromUser) => {
+      if (monitorOnly) return;
       if (!shouldCopyTrade(config, trade)) return;
       if (config.simulationMode) {
         logTrade("SIM", trade, { targetAddress: fromUser, copyStatus: "skipped" });

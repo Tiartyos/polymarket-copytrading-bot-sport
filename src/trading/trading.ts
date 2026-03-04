@@ -90,8 +90,10 @@ async function _executeCopyTrade(
       const msg = resp?.error ?? resp?.errorCode ?? "null response from CLOB client";
       throw new Error(`Order rejected: ${msg}`);
     }
-    txHash = resp?.transactionHash ?? resp?.transaction_hash ?? resp?.orderID ?? undefined;
-    updateTradeStatus(trade.id, "FILLED", txHash);
+    // transactionsHashes is an array in the CLOB response; orderID is Polymarket's internal ID
+    txHash = resp?.transactionsHashes?.[0] ?? resp?.transactionHash ?? resp?.transaction_hash ?? undefined;
+    const polymarketOrderId: string | undefined = resp?.orderID ?? undefined;
+    updateTradeStatus(trade.id, "FILLED", txHash, polymarketOrderId);
   } catch (err) {
     updateTradeStatus(trade.id, "FAILED");
     throw err;

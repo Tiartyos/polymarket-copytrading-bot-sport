@@ -4,11 +4,13 @@
   "main": "index.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:bot\" \"npm run dev:ui\"",
+    "monitor": "concurrently \"npm run dev:monitor\" \"npm run dev:ui\"",
     "sell-all": "tsx tools/sell-all.ts",
     "log": "tsx src/index.ts > log.txt 2>&1",
     "build": "npm run build:ui && tsc",
     "build:ui": "cd frontend && npm install && npm run build",
     "dev:bot": "tsx src/index.ts",
+    "dev:monitor": "tsx src/index.ts --monitor",
     "dev:ui": "cd frontend && npm run dev",
     "start": "node dist/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
