@@ -12,16 +12,16 @@ simulation = false
 [copy]
 # Single address: websocket. Multiple: polling positions API.
 target_address = [
-    #"0x1979ae6B7E6534dE9c4539D0c205E582cA637C9D",
-    #"0x204f72f35326db932158cba6adff0b9a1da95e14",
-    #"0x6bab41a0dc40d6dd4c1a915b8c01969479fd1292",
-    #"0x25e28169faea17421fcd4cc361f6436d1e449a09",
-    "0x2A5d83B20c8C44cddB504b9C0A245a00d648Ed7e",
+"0xf6415fa0aa9cb944c1c4afb9bc53ca82dd797b6f",
+"0x7a0da16a1205ee51a56fa862e8baa61e350eff14",
+"0x25e28169faea17421fcd4cc361f6436d1e449a09",
+"0x6765c1c000e3b99c7fffea752c561cb868f1fa0d",
+"0x8a091656e5f4c6bc4fdf37b2585be0235f68e317"
 ]
 revert_trade = false
 # Multiply copied trade size by this (1.0 = same size)
 # 0.005 = 0.5% of leader's trade size (conservative for $95 bankroll)
-size_multiplier = 0.1
+size_multiplier = 0.005
 
 # Polling interval (sec) when using multiple targets
 poll_interval_sec = 15
@@ -50,5 +50,3 @@ trade_sec_from_resolve = 0
 delta_highlight_sec = 10
 # Duration (seconds) for the +/- delta animation highlight (0 = use default 2)
 delta_animation_sec = 2
-
-
