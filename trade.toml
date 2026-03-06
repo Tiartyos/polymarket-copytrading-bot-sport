@@ -12,38 +12,43 @@ simulation = false
 [copy]
 # Single address: websocket. Multiple: polling positions API.
 target_address = [
-"0xf6415fa0aa9cb944c1c4afb9bc53ca82dd797b6f",
-"0x7a0da16a1205ee51a56fa862e8baa61e350eff14",
 "0x25e28169faea17421fcd4cc361f6436d1e449a09",
 "0x6765c1c000e3b99c7fffea752c561cb868f1fa0d",
-"0x8a091656e5f4c6bc4fdf37b2585be0235f68e317"
+"0x4eefdace58cb68839530ff98ec567c7fc41d3fcb",
+"0xd5ccdf772f795547e299de57f47966e24de8dea4",
+"0x8a091656e5f4c6bc4fdf37b2585be0235f68e317",
+"0x57c5de7efafb020e589f80e0da6e16e9b5c907aa"
 ]
 revert_trade = false
 # Multiply copied trade size by this (1.0 = same size)
-# 0.005 = 0.5% of leader's trade size (conservative for $95 bankroll)
-size_multiplier = 0.005
+# 0.001 = 0.1% of leader's trade size (conservative for $95 bankroll)
+size_multiplier = 0.001
 
 # Polling interval (sec) when using multiple targets
 poll_interval_sec = 15
 
 [exit]
 # Take profit at this % gain (0 = disabled)
-take_profit = 50
+take_profit = 0
 # Stop loss at this % loss (0 = disabled)
-stop_loss = 25
+stop_loss = 0
 # Trailing stop at this % (0 = disabled)
 trailing_stop = 0
 
 [filter]
 # Max USD to spend per copied trade (0 = no limit)
-# Cap at $5 per trade to preserve capital
-buy_amount_limit_in_usd = 5
+# Cap at $20 per trade to preserve capital
+buy_amount_limit_in_usd = 20
 
 # Only copy trades made within the last N seconds (0 = no filter)
 entry_trade_sec = 0
 
 # Skip if market resolves within N seconds (0 = no filter)
 trade_sec_from_resolve = 0
+
+# Skip if upside % is below this threshold (0 = no filter)
+# Set to 2 to skip fee-negative trades (Polymarket charges ~2% fee)
+min_upside_pct = 2
 
 [ui]
 # How long (seconds) to show positions with balance changes at top of Live positions (0 = use default 10)

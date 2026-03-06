@@ -10,6 +10,7 @@ export interface FilterConfig {
   buyAmountLimitInUsd: number;
   entryTradeSec: number;
   tradeSecFromResolve: number;
+  minUpsidePct: number;
 }
 
 export interface ExitConfig {

@@ -38,6 +38,7 @@ function loadToml(): Partial<AppConfig> {
       buyAmountLimitInUsd: (filter?.buy_amount_limit_in_usd as number) ?? 0,
       entryTradeSec: (filter?.entry_trade_sec as number) ?? 0,
       tradeSecFromResolve: (filter?.trade_sec_from_resolve as number) ?? 0,
+      minUpsidePct: (filter?.min_upside_pct as number) ?? 0,
     },
     exit: {
       takeProfit: (exit?.take_profit as number) ?? 0,
@@ -88,6 +89,7 @@ export function loadConfig(): AppConfig {
       buyAmountLimitInUsd: 0,
       entryTradeSec: 0,
       tradeSecFromResolve: 0,
+      minUpsidePct: 0,
     },
     exit: fromToml.exit ?? {
       takeProfit: 0,

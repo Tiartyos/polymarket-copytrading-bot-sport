@@ -26,5 +26,13 @@ export function shouldCopyTrade(config: AppConfig, trade: LeaderTrade): boolean 
     }
   }
 
+  if (filter.minUpsidePct > 0) {
+    const price = parseFloat(trade.price);
+    if (price > 0 && price < 1) {
+      const upsidePct = ((1 - price) / price) * 100;
+      if (upsidePct < filter.minUpsidePct) return false;
+    }
+  }
+
   return true;
 }
