@@ -13,3 +13,4 @@ data/*.db-shm
 data/*.db-wal
 scripts/
 data/
+sell-one.ts

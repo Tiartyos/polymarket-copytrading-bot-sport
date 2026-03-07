@@ -6,6 +6,7 @@
     "dev": "concurrently \"npm run dev:bot\" \"npm run dev:ui\"",
     "monitor": "concurrently \"npm run dev:monitor\" \"npm run dev:ui\"",
     "sell-all": "tsx tools/sell-all.ts",
+    "sell-one": "tsx tools/sell-one.ts",
     "log": "tsx src/index.ts > log.txt 2>&1",
     "build": "npm run build:ui && tsc",
     "build:ui": "cd frontend && npm install && npm run build",
