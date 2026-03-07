@@ -171,11 +171,15 @@ export function runPositionPolling(
         for (const asset of Object.keys(pprev)) {
           if (!(asset in curr)) {
             const s = pprev[asset];
+            // If the market's scheduled end date is in the past, the position
+            // disappeared because the market resolved — emit REDEEM so the bot
+            // can reclaim its USDC on-chain instead of trying a doomed CLOB sell.
+            const side = isExpired(s.endDate) ? "REDEEM" : "SELL";
             const trade: LeaderTrade = {
               id: `${user}-${asset}-${Date.now()}`,
               asset_id: asset,
               market: s.conditionId,
-              side: "SELL",
+              side,
               size: String(s.size),
               price: String(s.curPrice),
               match_time: String(Date.now()),

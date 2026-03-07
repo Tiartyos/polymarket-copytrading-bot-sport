@@ -1,7 +1,7 @@
 import { loadConfig } from "./config";
 import { createClient, ensureUsdcApproval } from "./config/client";
 import { runActivityStream, logTrade, runPositionPolling } from "./realtime";
-import { copyTrade, shouldCopyTrade, recordEntry, runExitLoop } from "./trading";
+import { copyTrade, shouldCopyTrade, recordEntry, runExitLoop, redeemBotPosition } from "./trading";
 import { startWebServer, setStatus, setUiConfig, setClient, setChainId, setBotPositionSizes, getBotPositionSizes } from "./web";
 import { initDb } from "./db";
 import { hasFilledBuyForAsset } from "./db/queries";
@@ -91,6 +91,26 @@ async function run() {
 
   function handlePolledTrade(trade: LeaderTrade, fromUser: string): void {
     if (monitorOnly) return;
+
+    // ── REDEEM: leader exited a resolved market — mirror the on-chain redemption
+    if (trade.side === "REDEEM") {
+      const botSize = getBotPositionSizes().get(trade.asset_id) ?? 0;
+      const weHold  = botSize > 0 && hasFilledBuyForAsset(fromUser, trade.asset_id);
+      if (weHold) {
+        const redeemTrade = { ...trade, size: String(botSize) };
+        if (config.simulationMode) {
+          logTrade("SIM", redeemTrade, { targetAddress: fromUser, copyStatus: "would redeem" });
+        } else if (config.walletPrivateKey) {
+          logTrade("REDEEM", redeemTrade, { targetAddress: fromUser, copyStatus: "leader redeemed" });
+          redeemBotPosition(redeemTrade, config, fromUser).catch((e) =>
+            console.error("[REDEEM] Auto-redeem failed:", e?.message ?? e)
+          );
+        }
+      } else {
+        logTrade("SKIP", trade, { targetAddress: fromUser, copyStatus: "REDEEM — not holding" });
+      }
+      return;
+    }
 
     if (trade.side === "SELL") {
       const botSize = getBotPositionSizes().get(trade.asset_id) ?? 0;
