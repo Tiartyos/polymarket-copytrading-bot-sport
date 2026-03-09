@@ -8,6 +8,7 @@
     "sell-all": "tsx tools/sell-all.ts",
     "sell-one": "tsx tools/sell-one.ts",
     "redeem-one": "tsx tools/redeem-one.ts",
+    "redeem-all": "tsx tools/redeem-all.ts",
     "log": "tsx src/index.ts > log.txt 2>&1",
     "build": "npm run build:ui && tsc",
     "build:ui": "cd frontend && npm install && npm run build",
