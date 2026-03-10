@@ -79,13 +79,12 @@ async function fetchPositions(user: string): Promise<Position[]> {
     if (!res.ok) throw new Error(`positions ${res.status}`);
     const page = (await res.json()) as Position[];
 
+    // Only hard-filter by size and expiry. curPrice-based gates ("price > 0",
+    // "price != 1") caused live positions to vanish from the snapshot when the
+    // data-API returned null/0 for freshly-opened markets, making those bets
+    // invisible to the delta-comparison that drives copy signals.
     const valid = page.filter(
-      (p) =>
-        p.asset &&
-        p.size > 0 &&
-        (p.curPrice ?? 0) > 0 &&
-        (p.curPrice ?? 1) != 1 &&
-        !isExpired(p.endDate)
+      (p) => p.asset && p.size > 0 && !isExpired(p.endDate)
     );
     all.push(...valid);
     if (page.length < POSITIONS_PAGE_SIZE) break;
@@ -127,6 +126,11 @@ export function runPositionPolling(
           continue;
         }
         logPositionChanges(user, curr, pprev);
+        // Tracks brand-new assets (not previously in pprev) whose price is
+        // currently invalid. These are excluded from nextPrev so they remain
+        // "unseen" and will be re-evaluated on the next poll once the data API
+        // has caught up with the correct price.
+        const invalidNewAssets = new Set<string>();
         for (const [asset, c] of Object.entries(curr)) {
           const s = pprev[asset]?.size ?? 0;
           const delta = c.size - s;
@@ -137,6 +141,22 @@ export function runPositionPolling(
             // after a leader sell+rebuy cycle when we haven't sold our position.
             if (!config.copy.revertTrade && hasFilledBuyForAsset(user, asset)) {
               console.log(`${fmtTime()} | SKIP | ${user} | ${c.slug ?? asset.slice(0, 12)} already held, revert_trade=false`);
+              continue;
+            }
+            // Guard: a BUY with price ≤ 0 or ≥ 1 is untradeable (market
+            // resolved or data-API hasn't indexed the price yet). For a
+            // genuinely-new position we defer it so it's not silently added
+            // to prev at this phantom state — the next poll will re-detect it
+            // once the price is valid. For an existing position that just
+            // increased we simply skip this cycle without corrupting prev.
+            const hasValidPrice = c.curPrice > 0 && c.curPrice < 1;
+            if (!hasValidPrice) {
+              const isNew = !(asset in pprev);
+              console.log(
+                `${fmtTime()} | WAIT-PRICE | ${user} | ${c.slug ?? asset.slice(0, 12)} curPrice=${c.curPrice}` +
+                (isNew ? " – new position, deferring until price is valid" : " – position increase, skipping cycle")
+              );
+              if (isNew) invalidNewAssets.add(asset);
               continue;
             }
             const trade: LeaderTrade = {
@@ -190,7 +210,20 @@ export function runPositionPolling(
             onTrade(trade, user);
           }
         }
-        prev[user] = curr;
+        // Build the next snapshot excluding positions that are brand-new
+        // with an invalid price. Omitting them keeps them "unseen" in prev so
+        // the next poll re-fires the BUY check once the data API returns a
+        // proper price. All previously-tracked assets and new assets with
+        // valid prices are carried forward normally.
+        if (invalidNewAssets.size > 0) {
+          const nextPrev: PositionSnapshot = {};
+          for (const [asset, c] of Object.entries(curr)) {
+            if (!invalidNewAssets.has(asset)) nextPrev[asset] = c;
+          }
+          prev[user] = nextPrev;
+        } else {
+          prev[user] = curr;
+        }
       } catch (e) {
         console.error(`${fmtTime()} | poll ${user}`, e?.message ?? e);
       }
