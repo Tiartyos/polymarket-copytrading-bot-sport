@@ -79,13 +79,21 @@ async function fetchPositions(user: string): Promise<Position[]> {
     if (!res.ok) throw new Error(`positions ${res.status}`);
     const page = (await res.json()) as Position[];
 
-    // Only hard-filter by size and expiry. curPrice-based gates ("price > 0",
-    // "price != 1") caused live positions to vanish from the snapshot when the
-    // data-API returned null/0 for freshly-opened markets, making those bets
-    // invisible to the delta-comparison that drives copy signals.
-    const valid = page.filter(
-      (p) => p.asset && p.size > 0 && !isExpired(p.endDate)
-    );
+    // Only hard-filter by size > 0. Both the old curPrice gates AND the
+    // isExpired gate have been intentionally removed from here:
+    //
+    // • curPrice gates ("price > 0", "price != 1") dropped positions whose
+    //   live market price was temporarily null/0 (e.g. thin liquidity just
+    //   before game time), making those bets invisible to the delta tracker.
+    //
+    // • isExpired dropped positions whose endDate had already passed — this
+    //   is the primary cause of missed bets: games that started at midnight ET
+    //   have their endDate in the past by the time of the very first poll,
+    //   so the positions never enter curr/prev and no BUY signal is ever emitted.
+    //
+    // Both checks are re-applied ONLY inside the BUY signal logic below, so
+    // they gate trade execution without corrupting the snapshot.
+    const valid = page.filter((p) => p.asset && p.size > 0);
     all.push(...valid);
     if (page.length < POSITIONS_PAGE_SIZE) break;
     offset += POSITIONS_PAGE_SIZE;
@@ -143,8 +151,24 @@ export function runPositionPolling(
               console.log(`${fmtTime()} | SKIP | ${user} | ${c.slug ?? asset.slice(0, 12)} already held, revert_trade=false`);
               continue;
             }
+            // Guard: skip BUY if the market has already started/resolved
+            // (endDate in the past). The position is still tracked in the
+            // snapshot for SELL/REDEEM purposes — we just don't copy a buy
+            // into a closed market. For a brand-new position (not in pprev)
+            // we also exclude it from nextPrev so we keep re-evaluating it
+            // on subsequent polls (handles the rare case where endDate is
+            // temporarily stale and corrects itself later).
+            if (isExpired(c.endDate)) {
+              const isNew = !(asset in pprev);
+              console.log(
+                `${fmtTime()} | SKIP-EXPIRED | ${user} | ${c.slug ?? asset.slice(0, 12)} endDate=${c.endDate ?? "none"}` +
+                (isNew ? " – new position in expired market, deferring" : " – position increase in expired market, skipping")
+              );
+              if (isNew) invalidNewAssets.add(asset);
+              continue;
+            }
             // Guard: a BUY with price ≤ 0 or ≥ 1 is untradeable (market
-            // resolved or data-API hasn't indexed the price yet). For a
+            // closed or data-API hasn't indexed the price yet). For a
             // genuinely-new position we defer it so it's not silently added
             // to prev at this phantom state — the next poll will re-detect it
             // once the price is valid. For an existing position that just
